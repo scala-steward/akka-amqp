@@ -1,16 +1,16 @@
 package akka.amqp
-
-import com.rabbitmq.client._
-import com.rabbitmq.client.{ Address ⇒ RmqAddress }
+import scala.concurrent.Future
 import akka.actor.FSM.{ CurrentState, Transition }
-import akka.dispatch.Future
+import scala.concurrent.{ ExecutionContext, Promise }
+import scala.concurrent.util.duration._
+import scala.concurrent.util.Duration
 import java.lang.Thread
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ ThreadFactory, Executors }
 import akka.actor._
-import akka.util.{ Duration, Timeout }
-import akka.util.duration._
+import akka.util.Timeout
 import akka.pattern.ask
+import java.io.IOException
 
 sealed trait ConnectionState
 case object Disconnected extends ConnectionState
@@ -19,7 +19,7 @@ case object Connected extends ConnectionState
 sealed trait ConnectionMessage
 case object Connect extends ConnectionMessage
 case object Disconnect extends ConnectionMessage
-case class ConnectionCallback[T](callback: Connection ⇒ T) extends ConnectionMessage
+case class ConnectionCallback[T](callback: RabbitConnection ⇒ T) extends ConnectionMessage
 
 private class ReconnectTimeoutGenerator {
 
@@ -42,13 +42,11 @@ private class ReconnectTimeoutGenerator {
     previousTimeout = 1
   }
 }
+private[akka] case class CreateRandomNameChild(props: Props)
+private[amqp] class DurableConnectionActor(settings: AmqpSettings)
+  extends Actor with FSM[ConnectionState, Option[RabbitConnection]] with ShutdownListener {
 
-private[amqp] class DurableConnectionActor(connectionProperties: ConnectionProperties)
-  extends Actor with FSM[ConnectionState, Option[Connection]] with ShutdownListener {
-
-  val settings = AMQP(context.system)
-
-  import connectionProperties._
+  import settings._
   val connectionFactory = new ConnectionFactory()
   connectionFactory.setRequestedHeartbeat(amqpHeartbeat.toSeconds.toInt)
   connectionFactory.setUsername(user)
@@ -75,7 +73,7 @@ private[amqp] class DurableConnectionActor(connectionProperties: ConnectionPrope
     case Event(Connect, _) ⇒
       log.info("Connecting to one of [{}]", addresses.mkString(", "))
       try {
-        val connection = connectionFactory.newConnection(executorService, addresses.map(RmqAddress.parseAddress).toArray)
+        val connection = connectionFactory.newConnection(executorService, addresses.map(RabbitAddress.parseAddress).toArray)
         connection.addShutdownListener(this)
         log.info("Successfully connected to {}", connection)
         cancelTimer("reconnect")
@@ -93,6 +91,8 @@ private[amqp] class DurableConnectionActor(connectionProperties: ConnectionPrope
       cancelTimer("reconnect")
       log.info("Already disconnected")
       stay()
+    case Event(cause: ShutdownSignalException, _) ⇒
+     stay()
   }
 
   when(Connected) {
@@ -124,6 +124,7 @@ private[amqp] class DurableConnectionActor(connectionProperties: ConnectionPrope
 
   onTermination {
     case StopEvent(reason, state, stateData) ⇒
+      stateData foreach (_.close())
       log.debug("Successfully disposed")
       executorService.shutdown()
   }
@@ -149,42 +150,46 @@ private[amqp] object ConnectionDisconnected {
   }
 }
 
-object ConnectionProperties {
-  def apply(system: ActorSystem) = {
-    val settings = AMQP(system)
-    import settings._
-    new ConnectionProperties(
-      DefaultUser,
-      DefaultPass,
-      DefaultAddresses,
-      DefaultVhost,
-      DefaultAmqpHeartbeatMs milliseconds,
-      DefaultMaxReconnectDelayMs milliseconds,
-      DefaultChannelThreads,
-      system)
+trait ChannelBuilders {
+  implicit val extension : AmqpExtensionImpl
+  protected val connection : DurableConnection
+  lazy val system : ActorSystem = extension._system
+  
+  def newChannel(persistent: Boolean = false) = new connection.DurableChannel {
+    override val persistentChannel = persistent
   }
+  
+  def newChannelForPublisher(persistent: Boolean = false) = new connection.DurableChannel with CanBuildDurablePublisher {
+   override val persistentChannel = persistent
+  }
+  
+  /**
+   * persistence is always false on the ConfirmingPublisher
+   */
+  def newChannelForConfirmingPublisher = new connection.DurableChannel with CanBuildConfirmingPublisher
+  
+  def newChannelForConsumer(persistent: Boolean = false) = new connection.DurableChannel with CanBuildDurableConsumer {
+   override val persistentChannel = persistent
+  }
+
+  
 }
-case class ConnectionProperties(user: String,
-                                pass: String,
-                                addresses: Seq[String],
-                                vhost: String,
-                                amqpHeartbeat: Duration,
-                                maxReconnectDelay: Duration,
-                                channelThreads: Int,
-                                system: ActorSystem)
 
-class DurableConnection(private[amqp] val connectionProperties: ConnectionProperties) {
-
-  private[amqp] val durableConnectionActor = connectionProperties.system.actorOf(Props(new DurableConnectionActor(connectionProperties)), "connection")
+class DurableConnection private[amqp] (implicit val extension: AmqpExtensionImpl) extends HasDurableChannel with ChannelBuilders {
+  
+override protected val connection = this
+import extension._
+  private[amqp] val durableConnectionActor = system.actorOf(Props(new DurableConnectionActor(settings)), "amqp-connection")
   durableConnectionActor ! Connect
-  val settings = AMQP(connectionProperties.system)
+  
 
-  def withConnection[T](callback: Connection ⇒ T): Future[T] = {
-    implicit val timeout = Timeout(settings.DefaultInteractionTimeout)
-    (durableConnectionActor ? ConnectionCallback(callback)) map (_.asInstanceOf[T])
+  def withConnection[T : reflect.ClassTag](callback: RabbitConnection ⇒ T): Future[T] = {
+    import ExecutionContext.Implicits.global
+    implicit val timeout = Timeout(settings.interactionTimeout)
+    (durableConnectionActor ? ConnectionCallback(callback)).mapTo[T]
   }
 
-  def withTempChannel[T](callback: Channel ⇒ T): Future[T] = {
+  def withTempChannel[T : reflect.ClassTag](callback: RabbitChannel ⇒ T): Future[T] = {
     withConnection { conn ⇒
       val ch = conn.createChannel()
       try {
@@ -195,34 +200,24 @@ class DurableConnection(private[amqp] val connectionProperties: ConnectionProper
     }
   }
 
-  def newChannel() = {
-    new DurableChannel(this)
-  }
 
-  def newPublisher(exchange: Exchange) = {
-    new DurablePublisher(this, exchange)
-  }
-
-  def newStashingPublisher(exchange: Exchange) = {
-    new DurablePublisher(this, exchange, true)
-  }
-
-  def newConfirmingPublisher(exchange: Exchange) = {
-    new DurablePublisher(this, exchange) with ConfirmingPublisher
-  }
-
-  def newConsumer(queue: Queue, deliveryHandler: ActorRef, autoAcknowledge: Boolean, queueBindings: QueueBinding*): DurableConsumer = {
-    new DurableConsumer(this, queue, deliveryHandler, autoAcknowledge, queueBindings: _*)
-  }
-
+  /**
+   * have the actor disconnect
+   */
   def disconnect() {
     durableConnectionActor ! Disconnect
   }
 
+  /**
+   * tell the Actor to connect
+   */
   def connect() {
     durableConnectionActor ! Connect
   }
 
+  /**
+   * kill the connection and the actor handling that connection
+   */
   def dispose() {
     if (!durableConnectionActor.isTerminated) {
       durableConnectionActor ! Disconnect

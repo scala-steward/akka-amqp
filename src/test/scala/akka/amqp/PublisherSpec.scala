@@ -1,47 +1,45 @@
 package akka.amqp
-
-import com.rabbitmq.client._
+import scala.concurrent.ExecutionContext.Implicits.global
 import akka.actor.ActorSystem
-import akka.dispatch.Await
 import akka.testkit.{ AkkaSpec, TestLatch }
-import akka.util.duration._
+import scala.concurrent.util.duration._
+import scala.concurrent.{ Await, Promise }
 
-class PublisherSpec extends AkkaSpec {
+class PublisherSpec extends AkkaSpec(AmqpConfig.Valid.config) {
 
-  trait PublisherScope {
-    def exchange: Exchange
+  trait PublisherScope  {
+    def exchange: ExchangeDeclaration
 
-    val system = ActorSystem("amqp")
-    val durableConnection = new DurableConnection(ConnectionProperties(system))
-    val publisher = durableConnection.newPublisher(exchange)
-    publisher.awaitStart()
+    implicit val ext = AmqpExtension(system)
+    
+    val channel = ext.connection.newChannelForPublisher()
+    
+    val publisher = Await.result(channel.newPublisher(exchange), 50 seconds)
 
     def after() {
-      publisher.stop()
-      durableConnection.dispose()
+      channel.stop()
     }
   }
 
   "Durable Publisher" should {
 
-    implicit val system = ActorSystem("DurablePublisher")
-
-    "publish message on default exchange" in new PublisherScope {
-      def exchange = DefaultExchange
-
-      try {
-        val future = publisher.publish(Message("test".getBytes, "1.2.3"))
-        Await.ready(future, 5 seconds).value must be === Some(Right(()))
-      } finally { after() }
-    }
+        "publish message on default exchange" in new PublisherScope {
+          def exchange = NamelessExchange
+    
+          try {
+            publisher.publish(Message("test".getBytes, "1.2.3"))
+          } finally { after() }
+        }
     "kill channel when publishing on non existing exchange" in new PublisherScope {
-      def exchange = UnmanagedExchange("does-not-exist")
+   
+      def exchange = Exchange("does-not-exist")("direct")
 
       try {
         implicit val system = ActorSystem("amqp")
         val latch = TestLatch()
-        publisher.onAvailable { channel ⇒
-          channel.addShutdownListener(new ShutdownListener {
+        channel tell { implicit ch ⇒
+          Exchange("does-not-exist").passive(ch).delete(false)
+          ch.addShutdownListener(new ShutdownListener {
             def shutdownCompleted(cause: ShutdownSignalException) {
               latch.open()
             }
@@ -52,10 +50,9 @@ class PublisherSpec extends AkkaSpec {
       } finally { after() }
     }
     "get message returned when sending with immediate flag" in new PublisherScope {
-      def exchange = DefaultExchange
+      def exchange = Exchange.nameless
 
       try {
-        implicit val system = ActorSystem("amqp")
         val latch = TestLatch()
         publisher.onReturn { returnedMessage ⇒
           latch.open()
@@ -63,31 +60,36 @@ class PublisherSpec extends AkkaSpec {
         publisher.publish(Message("test".getBytes, "1.2.3", immediate = true))
         Await.ready(latch, 5 seconds).isOpen must be === true
       } finally { after() }
+      
     }
     "get message returned when sending with mandatory flag" in new PublisherScope {
-      def exchange = DefaultExchange
+      def exchange = Exchange.nameless
       try {
-        implicit val system = ActorSystem("amqp")
         val latch = TestLatch()
         publisher.onReturn { returnedMessage ⇒
           latch.open()
         }
         publisher.publish(Message("test".getBytes, "1.2.3", mandatory = true))
-        Await.ready(latch, 5 seconds).isOpen must be === true
+        Await.ready(latch, 50 seconds).isOpen must be === true
       } finally { after() }
     }
-    "get message publishing acknowledged when using confirming publiser" in {
+    "get message publishing acknowledged when using confirming publiser" in  {
 
+    
       val system = ActorSystem("amqp")
-      val durableConnection = new DurableConnection(ConnectionProperties(system))
-      val confirmingPublisher = durableConnection.newConfirmingPublisher(DefaultExchange)
+      implicit val ext = AmqpExtension(system)
+      val durableConnection = ext.connection
+      
+      val channel = durableConnection.newChannelForConfirmingPublisher
+         
+      val confirmingPublisher = channel.newConfirmingPublisher( NamelessExchange)
+      
       try {
-        confirmingPublisher.awaitStart()
         val future = confirmingPublisher.publishConfirmed(Message("test".getBytes, "1.2.3"))
-        Await.ready(future, 5 seconds).value must be === Some(Right(Ack))
+        val promise = Promise.successful(Ack).future
+        Await.ready(future, 5 seconds).value must be === Await.ready(promise,5 seconds).value
       } finally {
-        confirmingPublisher.stop()
-        durableConnection.dispose()
+        channel.stop()
       }
     }
   }

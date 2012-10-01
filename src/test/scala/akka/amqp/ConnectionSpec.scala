@@ -1,19 +1,18 @@
 package akka.amqp
 
-import com.rabbitmq.client.ShutdownSignalException
 import akka.actor.FSM.{ UnsubscribeTransitionCallBack, CurrentState, Transition, SubscribeTransitionCallBack }
-import akka.dispatch.{ Await, Terminate }
+import akka.dispatch.{ Terminate }
 import akka.testkit.{ AkkaSpec, TestKit, TestFSMRef }
 import akka.actor.{ ActorSystem, PoisonPill }
-import akka.util.duration._
+import scala.concurrent.util.duration._
+import scala.concurrent.{ Await }
+import com.typesafe.config.ConfigFactory
+import scala.concurrent.Promise
 
-class ConnectionSpec extends AkkaSpec {
-
-  implicit val amqpSystem = ActorSystem("ConnectionSpec")
-
+class ValidConnectionSpec extends AkkaSpec(AmqpConfig.Valid.config) {
   "Durable Connection Actor" should {
 
-    val connectionActor = TestFSMRef(new DurableConnectionActor(defaultConnectionProperties))
+    val connectionActor = TestFSMRef(new DurableConnectionActor(AmqpConfig.Valid.settings))
 
     "start disconnected" in {
       connectionActor.stateName must be === Disconnected
@@ -23,12 +22,13 @@ class ConnectionSpec extends AkkaSpec {
       connectionActor ! Connect
       connectionActor.stateName must be === Connected
     }
-    "reconnect on ShutdownSignalException" in new TestKit(amqpSystem) with AmqpMock {
+    
+        "reconnect on ShutdownSignalException" in new TestKit(ActorSystem("reconnect",AmqpConfig.Valid.config)) with AmqpMock {
       try {
         within(5 second) {
           connectionActor ! SubscribeTransitionCallBack(testActor)
           expectMsg(CurrentState(connectionActor, Connected))
-          connectionActor ! new ShutdownSignalException(true, false, "Test", connection)
+          connectionActor ! new ShutdownSignalException(true, false, "Test (Mock Exception for testing)", connection)
           expectMsg(Transition(connectionActor, Connected, Disconnected))
           expectMsg(Transition(connectionActor, Disconnected, Connected))
         }
@@ -42,16 +42,46 @@ class ConnectionSpec extends AkkaSpec {
       connectionActor ! Disconnect
       connectionActor.stateName must be === Disconnected
     }
-    "dispose" in {
+        "dispose" in {
       connectionActor ! Disconnect
       connectionActor ! PoisonPill
       connectionActor.isTerminated must be === true
     }
-    "never connect using non exisiting host addresses" in new TestKit(amqpSystem) {
-      val connectionActor = TestFSMRef(new DurableConnectionActor(defaultConnectionProperties.copy(addresses = Seq("no-op:1234"))))
+        "close the Rabbit Connection when the ActorSystem shuts down" in new TestKit(ActorSystem("callback",AmqpConfig.Valid.config)) {
+          val conn : RabbitConnection = Await.result(AmqpExtension(system).connection.withConnection(x =>x),5 seconds)
+          conn.isOpen() must be === true
+          system.shutdown
+          
+          awaitCond(conn.isOpen() == false, 5 seconds, 100 milli)
+          
+        } 
+}
+  
+    "Durable Connection" should {
+    "execute callback on connection when connected" in new TestKit(ActorSystem("callback",AmqpConfig.Valid.config)) {
+def conn = AmqpExtension(system).connection
+      try {
+        val connectionActor = conn.durableConnectionActor
+        connectionActor ! SubscribeTransitionCallBack(testActor)
+        expectMsg(CurrentState(connectionActor, Connected))
+        val portFuture = conn.withConnection(_.getPort)
+        val promise = Promise.successful(5672).future
+        Await.ready(portFuture, 5 seconds).value must be === Await.ready(promise, 5 seconds).value
+      } finally {
+        conn.dispose()
+      }
+    }
+  }
+}
+
+
+class NoConnectionSpec extends AkkaSpec(AmqpConfig.Invalid.config) {
+  "Durable Connection" should {
+ "never connect using non existing host addresses" in {
+      val connectionActor = TestFSMRef(new DurableConnectionActor( AmqpConfig.Invalid.settings))
       try {
         connectionActor ! Connect
-        within(2 seconds) {
+        within(2500 milli) {
           connectionActor ! SubscribeTransitionCallBack(testActor)
           expectMsg(CurrentState(connectionActor, Disconnected))
         }
@@ -63,18 +93,11 @@ class ConnectionSpec extends AkkaSpec {
       }
     }
   }
-  "Durable Connection" should {
-    "execute callback on connection when connected" in new TestKit(amqpSystem) {
-      val durableConnection = new DurableConnection(defaultConnectionProperties)
-      try {
-        val connectionActor = durableConnection.durableConnectionActor
-        connectionActor ! SubscribeTransitionCallBack(testActor)
-        expectMsg(CurrentState(connectionActor, Connected))
-        val portFuture = durableConnection.withConnection(_.getPort)
-        Await.ready(portFuture, 5 seconds).value must be === Some(Right(5672))
-      } finally {
-        durableConnection.dispose()
-      }
-    }
-  }
 }
+  
+
+
+
+   
+  
+

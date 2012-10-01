@@ -1,17 +1,17 @@
 package akka.amqp
 
-import com.rabbitmq.client.AMQP.BasicProperties
+import scala.concurrent.{ ExecutionContext, Promise }
 import java.util.{ Collections, TreeSet }
 import java.util.concurrent.{ TimeoutException, TimeUnit, CountDownLatch, ConcurrentHashMap }
-import akka.util.duration._
+import scala.concurrent.util.duration._
+import scala.concurrent.util.Duration
+import akka.util.Timeout
+import scala.concurrent.{ Await, Future }
 import akka.event.Logging
-import akka.dispatch.{ Await, Promise, Future }
-import com.rabbitmq.client.{ ConfirmListener, ReturnListener }
 import akka.serialization.SerializationExtension
 import akka.pattern.ask
 import scala.collection.JavaConverters._
-import akka.util.Timeout._
-import akka.util.{ Timeout, Duration }
+import akka.actor.ActorSystem
 
 case class Message(payload: AnyRef,
                    routingKey: String,
@@ -19,37 +19,36 @@ case class Message(payload: AnyRef,
                    immediate: Boolean = false,
                    properties: Option[BasicProperties] = None)
 
-private[amqp] case class MessageWithExchange(message: Message, exchangeName: String, confirm: Boolean = false)
+private[amqp] case class PublishToExchange(message: Message, exchangeName: String, confirm: Boolean = false)
 
-class DurablePublisher(durableConnection: DurableConnection,
-                       exchange: Exchange,
-                       persistent: Boolean = false) extends DurableChannel(durableConnection, persistent) {
 
-  implicit val system = durableConnection.connectionProperties.system
+
+trait CanBuildDurablePublisher { durableChannel : DurableConnection#DurableChannel =>
+  def persistentChannel: Boolean
+import durableChannel._
+
+
+def newPublisher(exchange: ExchangeDeclaration) : Future[DurablePublisher] =
+    durableChannel.withChannel(rc => new DurablePublisher(exchange(rc)))
+
+  
+  
+def newPublisher(exchange: DeclaredExchange) =  new DurablePublisher(exchange)
+
+
+ class DurablePublisher private[amqp] (exchange: DeclaredExchange) {
+import extension._
+
+  //implicit val system = durableConnection.connectionProperties.system
   protected val log = Logging(system, this.getClass)
 
-  val latch = new CountDownLatch(1)
-  onAvailable { channel ⇒
-    exchange match {
-      case managed: ManagedExchange ⇒
-        log.debug("Declaring exchange {}", managed)
-        managed.declare(channel)
-      case _ ⇒
-    }
-    latch.countDown()
-  }
+ // val latch = new CountDownLatch(1)
+  
 
-  val exchangeName = exchange match {
-    case named: NamedExchange ⇒ named.name
-    case _                    ⇒ ""
-  }
-
-  def awaitStart(timeout: Long = 5, unit: TimeUnit = TimeUnit.SECONDS) = {
-    latch.await(timeout, unit)
-  }
+  val exchangeName = exchange.name
 
   def onReturn(callback: ReturnedMessage ⇒ Unit) {
-    onAvailable { channel ⇒
+    whenAvailable { channel ⇒
       channel.addReturnListener(new ReturnListener {
         def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
           callback.apply(ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body))
@@ -59,47 +58,86 @@ class DurablePublisher(durableConnection: DurableConnection,
   }
 
   def publish(message: Message) {
-    channelActor ! MessageWithExchange(message, exchangeName)
+    channelActor ! PublishToExchange(message, exchangeName)
+  }
+  def !(message: Message) {
+     channelActor ! PublishToExchange(message, exchangeName)
   }
 }
+
+}
+
 
 sealed trait Confirm
 case object Ack extends Confirm
 case object Nack extends Confirm
 
+trait CanBuildConfirmingPublisher extends CanBuildDurablePublisher { 
+  durableChannel : DurableConnection#DurableChannel =>
+
+  val persistentChannel = false
+  
+  
+     /**
+   * persistence should be false
+   */
+	def newConfirmingPublisher(exchange:DeclaredExchange) =
+	  new DurablePublisher(exchange) with ConfirmingPublisher
+  
+
+  
 trait ConfirmingPublisher extends ConfirmListener {
-  this: DurablePublisher ⇒
+  this: CanBuildDurablePublisher#DurablePublisher ⇒
 
+  
+  val lock : AnyRef = new Object(); 
   private val confirmHandles = new ConcurrentHashMap[Long, Promise[Confirm]]().asScala
-  private val unconfirmedSet = Collections.synchronizedSortedSet(new TreeSet[Long]());
-
-  onAvailable { channel ⇒
+  private val unconfirmedSet = Collections.synchronizedSortedSet(new TreeSet[Long]()) //Synchronized set must be in sychronized block!
+  
+  /**
+   * Seems like there should be a better way to construct this so that I dont need the preConfirmed HashMap
+   */
+  private val preConfirmed = new ConcurrentHashMap[Long, Confirm]().asScala
+  
+  durableChannel.whenAvailable { channel ⇒
     channel.confirmSelect()
     channel.addConfirmListener(this)
   }
 
-  def publishConfirmed(message: Message, timeout: Duration = (settings.DefaultPublisherConfirmTimeout milliseconds)): Future[Confirm] = {
+  def publishConfirmed(message: Message, timeout: Duration = settings.publisherConfirmTimeout): Future[Confirm] = {
     log.debug("Publishing on '{}': {}", exchangeName, message)
-    implicit val timeout = Timeout(settings.DefaultInteractionTimeout)
+    implicit val to = Timeout(timeout)
+	import ExecutionContext.Implicits.global
     val confirmPromise = Promise[Confirm]
-    val seqNoFuture = channelActor ? MessageWithExchange(message, exchangeName, true) mapTo manifest[Long]
+    val seqNoFuture = (channelActor ? PublishToExchange(message, exchangeName, true)).mapTo[Long]
     seqNoFuture.onSuccess {
       case seqNo ⇒
-        unconfirmedSet.add(seqNo)
+      lock.synchronized {
+       preConfirmed.remove(seqNo) match {
+        case Some(confirm) => confirmPromise.success(confirm)
+        case None =>
+          unconfirmedSet.add(seqNo)
         confirmHandles.put(seqNo, confirmPromise)
+      } 
+      }
     }
-    confirmPromise
+    confirmPromise.future
   }
 
-  private[amqp] def handleAck(seqNo: Long, multiple: Boolean) {
-    handleConfirm(seqNo, multiple, true)
-  }
+  
+  
+  /**
+   * implements the RabbitMQ ConfirmListener interface. 
+   */
+  private[amqp] def handleAck(seqNo: Long, multiple: Boolean) = handleConfirm(seqNo, multiple, true)
 
-  private[amqp] def handleNack(seqNo: Long, multiple: Boolean) {
-    handleConfirm(seqNo, multiple, false)
-  }
+   /**
+   * implements the RabbitMQ ConfirmListener interface. 
+   */
+  private[amqp] def handleNack(seqNo: Long, multiple: Boolean) = handleConfirm(seqNo, multiple, false)
 
-  private def handleConfirm(seqNo: Long, multiple: Boolean, ack: Boolean) {
+  private def handleConfirm(seqNo: Long, multiple: Boolean, ack: Boolean) = lock.synchronized { 
+ 
     if (multiple) {
       val headSet = unconfirmedSet.headSet(seqNo + 1)
       headSet.asScala.foreach(complete)
@@ -110,7 +148,14 @@ trait ConfirmingPublisher extends ConfirmListener {
     }
 
     def complete(seqNo: Long) {
-      confirmHandles.remove(seqNo).foreach(_.success(if (ack) Ack else Nack))
+      confirmHandles.remove(seqNo) match {
+        case Some(x) => x.success(if (ack) Ack else Nack)
+        case None => //the confirm happened before we got the SeqNo back, sadly this happens faairly often.
+          preConfirmed.put(seqNo, if (ack) Ack else Nack)
+      }
+      
     }
   }
+  
+}
 }
