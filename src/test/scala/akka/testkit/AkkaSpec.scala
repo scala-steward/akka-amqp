@@ -4,12 +4,12 @@
 package akka.testkit
 
 import language.{ postfixOps, reflectiveCalls }
-
+import scala.concurrent.Future
 import org.scalatest.{ WordSpec, BeforeAndAfterAll, Tag }
 import org.scalatest.matchers.MustMatchers
 import _root_.akka.actor.{ Actor, ActorRef, Props, ActorSystem, PoisonPill, DeadLetter }
 import _root_.akka.event.{ Logging, LoggingAdapter }
-import scala.concurrent.util.duration._
+import scala.concurrent.duration._
 import scala.concurrent.Await
 import com.typesafe.config.{ Config, ConfigFactory }
 import java.util.concurrent.TimeoutException
@@ -48,7 +48,7 @@ object AkkaSpec {
     val s = Thread.currentThread.getStackTrace map (_.getClassName) drop 1 dropWhile (_ matches ".*AkkaSpec.?$")
     val reduced = s.lastIndexWhere(_ == clazz.getName) match {
       case -1 ⇒ s
-      case z ⇒ s drop (z + 1)
+      case z  ⇒ s drop (z + 1)
     }
     reduced.head.replaceFirst(""".*\.""", "").replaceAll("[^a-zA-Z_0-9]", "_")
   }
@@ -58,14 +58,14 @@ object AkkaSpec {
 abstract class AkkaSpec(_system: ActorSystem)
   extends TestKit(_system) with WordSpec with MustMatchers with BeforeAndAfterAll {
 
-  def this(config: Config) = this(ActorSystem(AkkaSpec.getCallerName(getClass),
+  def this(config: Config) = this(ActorSystem(AkkaSpec.getCallerName(getClass).filterNot(_ == '_'),
     ConfigFactory.load(config.withFallback(AkkaSpec.testConf))))
 
   def this(s: String) = this(ConfigFactory.parseString(s))
 
   def this(configMap: Map[String, _]) = this(AkkaSpec.mapToConfig(configMap))
 
-  def this() = this(ActorSystem(AkkaSpec.getCallerName(getClass), AkkaSpec.testConf))
+  def this() = this(ActorSystem(AkkaSpec.getCallerName(getClass).filterNot(_ == '_'), AkkaSpec.testConf))
 
   val log: LoggingAdapter = Logging(system, this.getClass)
 
@@ -90,9 +90,8 @@ abstract class AkkaSpec(_system: ActorSystem)
 
   protected def atTermination() {}
 
-  def spawn(dispatcherId: String = Dispatchers.DefaultDispatcherId)(body: ⇒ Unit) {
-    system.actorOf(Props(ctx ⇒ { case "go" ⇒ try body finally ctx.stop(ctx.self) }).withDispatcher(dispatcherId)) ! "go"
-  }
+  def spawn(dispatcherId: String = Dispatchers.DefaultDispatcherId)(body: ⇒ Unit): Unit =
+    Future(body)(system.dispatchers.lookup(dispatcherId))
 }
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
@@ -145,7 +144,7 @@ class AkkaSpecSpec extends WordSpec with MustMatchers {
         implicit val davyJones = otherSystem.actorOf(Props(new Actor {
           def receive = {
             case m: DeadLetter ⇒ locker :+= m
-            case "Die!" ⇒ sender ! "finally gone"; context.stop(self)
+            case "Die!"        ⇒ sender ! "finally gone"; context.stop(self)
           }
         }), "davyJones")
 

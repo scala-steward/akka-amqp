@@ -1,16 +1,31 @@
 import sbt._
 import Keys._
+import com.typesafe.sbt.SbtScalariform
+import com.typesafe.sbt.SbtScalariform.ScalariformKeys
 
 object AkkaAmqpBuild extends Build {
   import dependencies._
  
 
+    lazy val formatSettings = SbtScalariform.scalariformSettings ++ Seq(
+    ScalariformKeys.preferences in Compile := formattingPreferences,
+    ScalariformKeys.preferences in Test    := formattingPreferences
+  )
   
-  lazy val standardSettings = Project.defaultSettings ++ Seq(
+  def formattingPreferences = {
+    import scalariform.formatter.preferences._
+    FormattingPreferences()
+    .setPreference(RewriteArrowSymbols, true)
+    .setPreference(AlignParameters, true)
+    .setPreference(AlignSingleLineCaseStatements, true)
+  }
+  
+  lazy val standardSettings = Project.defaultSettings ++ formatSettings ++ Seq(
   	resolvers += "Typesafe Repo" at "http://repo.typesafe.com/typesafe/releases/",
+    resolvers += "Sonatype OSS Snapshots" at "http://oss.sonatype.org/content/repositories/releases/",
     organization := "com.github.momania",
     version			 := "2.2-SNAPSHOT",
-    scalaVersion := "2.10.0-M7"
+    scalaVersion := "2.10.0-RC1"
   )
 
   //  lazy val amqp = Project(
@@ -29,6 +44,7 @@ object AkkaAmqpBuild extends Build {
     	libraryDependencies ++= Seq( 
 	      AmqpClient,
         AkkaActor,
+		AkkaAgent,
 	      Specs2,
         JUnit,
 		Scalatest,
