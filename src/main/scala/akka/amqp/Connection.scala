@@ -42,7 +42,7 @@ private[amqp] class ReconnectTimeoutGenerator {
     previousTimeout = 1
   }
 }
-private[akka] case class CreateChannel(stashMessages: Boolean = false)
+case class CreateChannel(stashMessages: Boolean = false)
 
 class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: akka.agent.Agent[Boolean])
   extends Actor with FSM[ConnectionState, Option[RabbitConnection]] with ShutdownListener {
