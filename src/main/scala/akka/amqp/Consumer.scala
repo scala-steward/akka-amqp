@@ -112,7 +112,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
         case e: UndeclaredExchange ⇒ e.declare(channel)
         case e: DeclaredExchange   ⇒ e
       }
-      if (declaredExchange.name != "") { //no not QueueBind the namelessExchange
+      if (declaredExchange.name != "") { //do not QueueBind the namelessExchange
         //declare queueBinding
         import scala.collection.JavaConverters._
         require(binding.routingKey != null, "the routingKey must not be null to bind " + declaredExchange.name + " >> " + declaredQueue.name)
