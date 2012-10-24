@@ -95,8 +95,8 @@ object ChannelActor {
   /**
    * create a new child Actor
    */
-  case class NewChildOfChannel(props: Props, nameOption : Option[String] = None)
-  
+  case class NewChildOfChannel(props: Props, nameOption: Option[String] = None)
+
   /**
    * Code to execute whenever a new channel is received
    */
@@ -221,10 +221,12 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
 
   whenUnhandled {
     publisherUnhandled orElse {
-      case Event(CreateNewChildOfChannel(props, Some(childName))) =>
+      case Event(NewChildOfChannel(props, Some(childName)), _) ⇒
         context.actorOf(props, name = childName)
-        case Event(CreateNewChildOfChannel(props, None))) =>
-          context.actorOf(props)
+        stay()
+      case Event(NewChildOfChannel(props, None), _) ⇒
+        context.actorOf(props)
+        stay()
       case Event(ExecuteOnNewChannel(callback), _) ⇒
         stay() using stateData.addCallback(callback)
       case Event(cause: ShutdownSignalException, _ %: callbacks %: mode) ⇒

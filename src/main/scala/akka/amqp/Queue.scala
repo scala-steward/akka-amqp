@@ -101,13 +101,12 @@ case class DeclaredQueue(peer: RabbitQueue.DeclareOk, params: Option[QueueParams
 
 }
 
-
 object QueueBinding {
-  
+
   /**
    * This will connect the Consumer to one or more Queues without any QueueBindings, only the Queue is declared.
    */
-  def apply(queue : Queue*) : Seq[QueueBinding] = queue map (q=> Exchange.nameless >> q )
+  def apply(queue: Queue*): Seq[QueueBinding] = queue map (q ⇒ Exchange.nameless >> q)
 }
 
 trait QueueBinding extends Declarable[DeclaredQueueBinding] {
