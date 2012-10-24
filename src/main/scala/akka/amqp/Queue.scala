@@ -63,22 +63,22 @@ trait Declarable[T] {
 case class QueueParams(durable: Boolean, exclusive: Boolean, autoDelete: Boolean, arguments: Option[Map[String, AnyRef]])
 case class ActiveUndeclaredQueue private[amqp] (name: String, durable: Boolean, exclusive: Boolean, autoDelete: Boolean, arguments: Option[Map[String, AnyRef]])
   extends Queue with UndeclaredQueue {
-  def nameOption = Some(name)
+  def nameOption = if (name.size != 0) Some(name) else None
   def params = Some(QueueParams(durable, exclusive, autoDelete, arguments))
   def declare(implicit channel: RabbitChannel): DeclaredQueue = DeclaredQueue(channel.queueDeclare(name, durable, exclusive, autoDelete, arguments.map(_.asJava).getOrElse(null)), params)
 }
 case class PassiveUndeclaredQueue private[amqp] (name: String)
   extends Queue with UndeclaredQueue {
-  def nameOption = Some(name)
+  def nameOption = if (name.size != 0) Some(name) else None
   def params = None
   def declare(implicit channel: RabbitChannel): DeclaredQueue = DeclaredQueue(channel.queueDeclarePassive(name), params)
 }
 
-case object UndeclaredDefaultQueue extends Queue with UndeclaredQueue {
-  def nameOption = None
-  def params = None
-  def declare(implicit channel: RabbitChannel): DeclaredQueue = DeclaredQueue(channel.queueDeclare(), params)
-}
+//case object UndeclaredDefaultQueue extends Queue with UndeclaredQueue {
+//  def nameOption = None
+//  def params = None
+//  def declare(implicit channel: RabbitChannel): DeclaredQueue = DeclaredQueue(channel.queueDeclare(), params)
+//}
 
 case class DeclaredQueue(peer: RabbitQueue.DeclareOk, params: Option[QueueParams]) extends Queue {
   def name: String = peer.getQueue()

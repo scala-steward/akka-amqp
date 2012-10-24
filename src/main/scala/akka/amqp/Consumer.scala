@@ -82,7 +82,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
 
       //add to declaredQueues on declare, so that declaredQueues is unique
       val declaredQueue = binding.queue match {
-        case q: UndeclaredDefaultQueue.type ⇒
+        case q: UndeclaredQueue if (q.nameOption.isEmpty) ⇒
           if (defaultQueue.isEmpty) {
             //if the Default Queue is declared, return to sender.
             val declared = q.declare(channel)
@@ -93,7 +93,6 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
             defaultQueue.get
           }
         case q: UndeclaredQueue ⇒
-
           val dqOption = uniqueDeclaredQueues.collectFirst { case dq if dq.name == q.nameOption.get ⇒ dq }
           if (dqOption.isEmpty) {
             val declared = q.declare(channel)
