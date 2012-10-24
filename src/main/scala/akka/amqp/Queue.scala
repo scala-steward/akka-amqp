@@ -18,14 +18,20 @@ object Queue {
   /**
    * get the default queue
    */
-  def apply() = UndeclaredDefaultQueue
+  def apply() = new DefaultQueueDeclarationMode
 
   def apply(name: String) = new QueueDeclarationMode(name)
   def named(name: String) = new QueueDeclarationMode(name)
+
+  /**
+   * access a queue prefixed with "amq." passively.
+   */
+  def reserved(name: String) = new QueueDeclarationMode("amq." + name).passive
+
   /**
    * get the default Queue
    */
-  def default = UndeclaredDefaultQueue
+  def default = new DefaultQueueDeclarationMode
 
 }
 
@@ -34,6 +40,13 @@ class QueueDeclarationMode private[amqp] (val name: String) {
              arguments: Option[Map[String, AnyRef]] = None) = ActiveUndeclaredQueue(name, durable, exclusive, autoDelete, arguments)
   def passive = PassiveUndeclaredQueue(name)
 }
+
+class DefaultQueueDeclarationMode private[amqp] {
+  def active(durable: Boolean = false, exclusive: Boolean = false, autoDelete: Boolean = true,
+             arguments: Option[Map[String, AnyRef]] = None) = ActiveUndeclaredQueue("", durable, exclusive, autoDelete, arguments)
+  def passive = PassiveUndeclaredQueue("")
+}
+
 trait Queue {
   def nameOption: Option[String]
   def params: Option[QueueParams]

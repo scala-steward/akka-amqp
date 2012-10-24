@@ -45,7 +45,7 @@ class ConsumerSpec extends WordSpec with MustMatchers with BeforeAndAfterAll {
       runTest {
 
         val consumerActor = Await.result((ext.connectionActor ? CreateChannel()).mapTo[ActorRef], 5 seconds)
-        val qBinding = Exchange.nameless >> Queue.default
+        val qBinding = Exchange.nameless >> Queue.default.active()
         consumerActor ! Consumer(testActor, autoAck = true, Seq(qBinding))
         val defaultQueue = expectMsgType[DeclaredQueue]
         val publisherActor = Await.result((ext.connectionActor ? CreateChannel()).mapTo[ActorRef], 5 seconds)
