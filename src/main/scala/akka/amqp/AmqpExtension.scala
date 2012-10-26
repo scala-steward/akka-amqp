@@ -1,5 +1,5 @@
 package akka.amqp
-
+import akka.pattern.ask
 import scala.language.implicitConversions
 import akka.actor._
 import com.typesafe.config.Config
@@ -27,6 +27,11 @@ class AmqpExtensionImpl(implicit val _system: ActorSystem) extends Extension {
   def isConnected = connectionStatusAgent.get
 
   val connectionActor = _system.actorOf(Props(new ConnectionActor(settings, connectionStatusAgent)), "amqp-connection")
+
+  def createChannel = {
+    implicit val to = akka.util.Timeout(5 seconds)
+    (connectionActor ? CreateChannel()).mapTo[ActorRef]
+  }
 
   //private implicit val timeout = akka.util.Timeout(settings.interactionTimeout)
 

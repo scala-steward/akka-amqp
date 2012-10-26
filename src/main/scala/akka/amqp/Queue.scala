@@ -39,6 +39,10 @@ class QueueDeclarationMode private[amqp] (val name: String) {
   def active(durable: Boolean = false, exclusive: Boolean = false, autoDelete: Boolean = true,
              arguments: Option[Map[String, AnyRef]] = None) = ActiveUndeclaredQueue(name, durable, exclusive, autoDelete, arguments)
   def passive = PassiveUndeclaredQueue(name)
+  /**
+   * create a queue that will not declare itself with the AMQP server if you call the declare method.
+   */
+  def dontDeclare = DontDeclareUndeclaredQueue(name)
 }
 
 class DefaultQueueDeclarationMode private[amqp] {
@@ -72,6 +76,23 @@ case class PassiveUndeclaredQueue private[amqp] (name: String)
   def nameOption = if (name.size != 0) Some(name) else None
   def params = None
   def declare(implicit channel: RabbitChannel): DeclaredQueue = DeclaredQueue(channel.queueDeclarePassive(name), params)
+}
+
+case class DontDeclareUndeclaredQueue private[amqp] (name: String)
+  extends Queue with UndeclaredQueue {
+  def nameOption = if (name.size != 0) Some(name) else None
+  def params = None
+  def declare(implicit channel: RabbitChannel): DeclaredQueue = {
+    val ok = new Object with RabbitQueue.DeclareOk {
+      def getQueue() = name;
+      def getMessageCount() = -1; //messageCount is unknown
+      def getConsumerCount() = -1; //consumerCount is unknown         
+      def protocolClassId() = 50
+      def protocolMethodId() = 11
+      def protocolMethodName = "queue.declare-ok"
+    }
+    DeclaredQueue(ok, params)
+  }
 }
 
 //case object UndeclaredDefaultQueue extends Queue with UndeclaredQueue {

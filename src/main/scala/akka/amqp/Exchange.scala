@@ -33,6 +33,10 @@ class ExchangeDeclarationMode private[amqp] (val name: String) {
              internal: Boolean = false,
              arguments: Option[Map[String, AnyRef]] = None) = ActiveUndeclaredExchange(name, exchangeType, durable, autoDelete, internal, arguments)
   def passive = PassiveUndeclaredExchange(name)
+  /**
+   * create an exchange that will not declare itself with the AMQP server if you call the declare method.
+   */
+  def dontDeclare = DontDeclareUndeclaredExchange(name)
 }
 
 //make the declarations not use rabbitchannel, and allow access to name, etc.
@@ -40,6 +44,20 @@ class ExchangeDeclarationMode private[amqp] (val name: String) {
 sealed trait UndeclaredExchange extends Exchange with Declarable[DeclaredExchange] {
   def declare(implicit channel: RabbitChannel): DeclaredExchange
 }
+
+case class DontDeclareUndeclaredExchange private[amqp] (val name: String) extends UndeclaredExchange {
+  val params: Option[ExchangeParams] = None
+  def declare(implicit channel: RabbitChannel): NamedExchange = {
+    val ok = new Object with RabbitExchange.DeclareOk {
+      def protocolClassId() = 40
+      def protocolMethodId() = 11
+      def protocolMethodName() = "exchange.declare-ok"
+    }
+
+    NamedExchange(name, ok, None)
+  }
+}
+
 case class PassiveUndeclaredExchange private[amqp] (val name: String) extends UndeclaredExchange {
   val params: Option[ExchangeParams] = None
   def declare(implicit channel: RabbitChannel): NamedExchange = NamedExchange(name, channel.exchangeDeclarePassive(name), None)
