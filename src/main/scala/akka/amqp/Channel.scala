@@ -222,10 +222,10 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
   whenUnhandled {
     publisherUnhandled orElse {
       case Event(NewChildOfChannel(props, Some(childName)), _) ⇒
-        context.actorOf(props, name = childName)
+        sender ! context.actorOf(props, name = childName)
         stay()
       case Event(NewChildOfChannel(props, None), _) ⇒
-        context.actorOf(props)
+        sender ! context.actorOf(props)
         stay()
       case Event(ExecuteOnNewChannel(callback), _) ⇒
         stay() using stateData.addCallback(callback)
