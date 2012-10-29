@@ -131,7 +131,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
       })
       tag
     }
-    ConsumerMode(listener, tags)
+    ConsumerMode(listener, autoAck, bindings, tags)
   }
 
   when(Available) {
@@ -139,8 +139,23 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
       stay() using stateData.toMode(setupConsumer(channel, listener, autoAck, bindings))
   }
 
+  def consumerUnhandled: StateFunction = {
+    case Event(Consumer(listener, autoAck, bindings), data) ⇒
+      //switch modes and save the message contents so that when we transition back to Available we know how to wire things up
+      stay() using stateData.toMode(ConsumerMode(listener, autoAck, bindings, Seq.empty))
+  }
+
+  onTransition {
+    //really would prefer to just "Let it crash" when a channel disconnects,
+    //instead of reloading the state for this actor...not sure how that would work with the autoreconnect functionality though
+    case Unavailable -> Available if nextStateData.isConsumer ⇒
+      val _ %: _ %: ConsumerMode(listener, autoAck, bindings, _) = nextStateData
+      context.self ! Consumer(listener, autoAck, bindings) //switch to modes again before unstashing messages!
+      unstashAll()
+  }
+
   def consumerTermination: PartialFunction[StopEvent, Unit] = {
-    case StopEvent(_, state, ChannelData(Some(channel), callbacks, ConsumerMode(_, tags))) ⇒
+    case StopEvent(_, state, ChannelData(Some(channel), callbacks, ConsumerMode(_, _, _, tags))) ⇒
       Exception.ignoring(classOf[ShutdownSignalException], classOf[IOException]) {
         tags foreach { tag ⇒ channel.basicCancel(tag) }
       }

@@ -22,7 +22,7 @@ class PublisherSpec extends WordSpec with MustMatchers with BeforeAndAfterAll {
     implicit val timeout = akka.util.Timeout(5 seconds)
     val ext = AmqpExtension(system)
     ext.connectionActor ! Connect
-    val channelActor = Await.result((ext.connectionActor ? CreateChannel()).mapTo[ActorRef], 5 seconds)
+    val channelActor = Await.result((ext.connectionActor ? CreateChannel(false)).mapTo[ActorRef], 5 seconds)
 
     /**
      * If akkaSpec is used in a scope, it's ActorSystem must be shutdown manually, call this at the end of each scope
@@ -119,7 +119,7 @@ class PublisherSpec extends WordSpec with MustMatchers with BeforeAndAfterAll {
       //val system = ActorSystem("amqp")
       //implicit val ext = AmqpExtension(system)
 
-      //val channelActor = Await.result((ext.connectionActor ? CreateChannel()).mapTo[ActorRef], 5 seconds)
+      //val channelActor = Await.result((ext.connectionActor ? CreateChannel(false)).mapTo[ActorRef], 5 seconds)
       channelActor ! ConfirmingPublisher(Some(testActor))
 
       //val durableConnection = ext.connection

@@ -37,6 +37,7 @@ object ChannelActor {
     def addCallback(callback: RabbitChannel ⇒ Unit) = ChannelData(channel, callbacks :+ callback, mode)
     def toMode(mode: ChannelMode) = ChannelData(channel, callbacks, mode)
 
+    def isBasicChannel = mode == BasicChannel
     def isConfirmingPublisher = mode.isInstanceOf[ConfirmingPublisher]
     def isPublisher = mode.isInstanceOf[Publisher]
     def isConsumer = mode.isInstanceOf[ConsumerMode]
@@ -82,7 +83,7 @@ object ChannelActor {
    */
   case class Consumer(listener: ActorRef, autoAck: Boolean, binding: Seq[QueueBinding])
 
-  case class ConsumerMode(listener: ActorRef, tags: Seq[String]) extends ChannelMode {
+  case class ConsumerMode(listener: ActorRef, autoAck: Boolean, binding: Seq[QueueBinding], tags: Seq[String]) extends ChannelMode {
 
   }
 
@@ -220,7 +221,7 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
   }
 
   whenUnhandled {
-    publisherUnhandled orElse {
+    consumerUnhandled orElse publisherUnhandled orElse {
       case Event(NewChildOfChannel(props, Some(childName)), _) ⇒
         sender ! context.actorOf(props, name = childName)
         stay()
@@ -247,7 +248,7 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
   }
 
   onTransition {
-    case Unavailable -> Available ⇒ unstashAll()
+    case Unavailable -> Available if nextStateData.isBasicChannel ⇒ unstashAll()
   }
 
   def shutdownCompleted(cause: ShutdownSignalException) {

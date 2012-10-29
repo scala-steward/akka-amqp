@@ -116,14 +116,14 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
   onTransition {
     //really would prefer to just "Let it crash" when a channel disconnects,
     //instead of reloading the state for this actor...not sure how that would work with the autoreconnect functionality though
-    case Unavailable -> Available ⇒
-      nextStateData match {
-        case Some(channel) %: _ %: Publisher(listener) ⇒
-          setupPublisher(channel, listener)
-        case Some(channel) %: _ %: ConfirmingPublisher(listener) ⇒
-          setupConfirmingPublisher(channel, listener)
-        case _ ⇒
-      }
+    case Unavailable -> Available if nextStateData.isPublisher ⇒
+      val Some(channel) %: _ %: Publisher(listener) = nextStateData
+      context.self ! Publisher(listener) //switch to modes again before unstashing messages!
+      unstashAll()
+    case Unavailable -> Available if nextStateData.isConfirmingPublisher ⇒
+      val Some(channel) %: _ %: ConfirmingPublisher(listener) = nextStateData
+      context.self ! ConfirmingPublisher(listener) //switch to modes again before unstashing messages!
+      unstashAll()
   }
 
   lazy val lock: AnyRef = new Object();
