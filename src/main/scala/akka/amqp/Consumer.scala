@@ -80,6 +80,11 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
     var defaultQueue: Option[DeclaredQueue] = None
     bindings foreach { binding ⇒
 
+      val declaredExchange = binding.exchange match {
+        case e: UndeclaredExchange ⇒ e.declare(channel, context.system)
+        case e: DeclaredExchange   ⇒ e
+      }
+
       //add to declaredQueues on declare, so that declaredQueues is unique
       val declaredQueue = binding.queue match {
         case q: UndeclaredQueue if (q.nameOption.isEmpty) ⇒
@@ -108,15 +113,12 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
           q
       }
 
-      val declaredExchange = binding.exchange match {
-        case e: UndeclaredExchange ⇒ e.declare(channel, context.system)
-        case e: DeclaredExchange   ⇒ e
-      }
       if (declaredExchange.name != "") { //do not QueueBind the namelessExchange
         //declare queueBinding
         import scala.collection.JavaConverters._
         //require(binding.routingKey != null, "the routingKey must not be null to bind " + declaredExchange.name + " >> " + declaredQueue.name)
-        channel.queueBind(declaredQueue.name, declaredExchange.name, binding.routingKey, binding.getArgs.map(_.toMap.asJava).getOrElse(null))
+        val ok = channel.queueBind(declaredQueue.name, declaredExchange.name, binding.routingKey, binding.getArgs.map(_.toMap.asJava).getOrElse(null))
+        context.system.eventStream.publish(NewlyDeclared(DeclaredQueueBinding(Some(ok), declaredQueue, declaredExchange, binding)))
       }
     }
 
