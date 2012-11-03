@@ -96,7 +96,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
           val dqOption = uniqueDeclaredQueues.collectFirst { case dq if dq.name == q.nameOption.get ⇒ dq }
           if (dqOption.isEmpty) {
             val declared = q.declare(channel, context.system)
-            uniqueDeclaredQueues = q.declare(channel, context.system) :: uniqueDeclaredQueues
+            uniqueDeclaredQueues = declared :: uniqueDeclaredQueues
             declared
           } else {
             dqOption.get
