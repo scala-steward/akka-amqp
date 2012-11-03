@@ -63,7 +63,7 @@ case class PassiveUndeclaredExchange private[amqp] (val name: String) extends Un
   val params: Option[ExchangeParams] = None
   def declare(implicit channel: RabbitChannel, system: ActorSystem): NamedExchange = {
     val de = NamedExchange(name, channel.exchangeDeclarePassive(name), None, this)
-    system.eventStream.publish(de)
+    system.eventStream.publish(NewlyDeclared(de))
     de
   }
 }
@@ -79,7 +79,7 @@ case class ActiveUndeclaredExchange private[amqp] (val name: String, exchangeTyp
     val declareOk = channel.exchangeDeclare(name, exchangeType, durable, autoDelete, internal, arguments.map(_.asJava).getOrElse(null))
     val params = ExchangeParams(exchangeType, durable, autoDelete, internal, arguments)
     val de = NamedExchange(name, declareOk, Some(params), this)
-    system.eventStream.publish(de)
+    system.eventStream.publish(NewlyDeclared(de))
     de
   }
 }
