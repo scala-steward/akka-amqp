@@ -84,7 +84,12 @@ object ChannelActor {
   case class Consumer(listener: ActorRef, autoAck: Boolean, binding: Seq[QueueBinding])
 
   case class ConsumerMode(listener: ActorRef, autoAck: Boolean, binding: Seq[QueueBinding], tags: Seq[String]) extends ChannelMode {
-
+    def cancelTags(channel: RabbitChannel) = {
+      Exception.ignoring(classOf[ShutdownSignalException], classOf[IOException]) {
+        tags foreach { tag ⇒ channel.basicCancel(tag) }
+      }
+      ConsumerMode(listener, autoAck, binding, Seq.empty)
+    }
   }
 
   /**

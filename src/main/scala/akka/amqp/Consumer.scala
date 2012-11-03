@@ -64,6 +64,7 @@ case class Delivery(payload: Array[Byte],
 //  }        
 //    
 //}
+case object StopConsuming
 trait ChannelConsumer { channelActor: ChannelActor ⇒
 
   /**
@@ -140,6 +141,8 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
     case Event(Consumer(listener, autoAck, bindings), Some(channel) %: _ %: _) ⇒
       log.debug("Switching to Consumer Mode, Available")
       stay() using stateData.toMode(setupConsumer(channel, listener, autoAck, bindings))
+    case Event(StopConsuming, ChannelData(Some(channel), _, cm: ConsumerMode)) ⇒
+      stay() using stateData.toMode(cm cancelTags channel);
   }
 
   def consumerUnhandled: StateFunction = {
@@ -147,6 +150,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
       log.debug("Switching to Consumer Mode, Not Available")
       //switch modes and save the message contents so that when we transition back to Available we know how to wire things up
       stay() using stateData.toMode(ConsumerMode(listener, autoAck, bindings, Seq.empty))
+
   }
 
   onTransition {
@@ -159,10 +163,9 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
   }
 
   def consumerTermination: PartialFunction[StopEvent, Unit] = {
-    case StopEvent(_, state, ChannelData(Some(channel), callbacks, ConsumerMode(_, _, _, tags))) ⇒
-      Exception.ignoring(classOf[ShutdownSignalException], classOf[IOException]) {
-        tags foreach { tag ⇒ channel.basicCancel(tag) }
-      }
+    case StopEvent(_, state, ChannelData(Some(channel), callbacks, cm: ConsumerMode)) ⇒
+      log.debug("\n\n\nConsumer terminating\n\n\n")
+      cm.cancelTags(channel)
       terminateWhenActive(channel)
   }
 }
