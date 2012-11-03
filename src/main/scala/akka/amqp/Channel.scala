@@ -128,6 +128,8 @@ object ChannelActor {
 
 }
 
+case class NewlyDeclared(declared: AnyRef)
+
 private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
   extends Actor with FSM[ChannelState, ChannelData] with ShutdownListener
   with ChannelPublisher with ChannelConsumer {
@@ -207,7 +209,8 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
       stay()
     case Event(Declare(items @ _*), Some(channel) %: _ %: _) ⇒
       items foreach {
-        declarable: Declarable[_] ⇒ sender ! declarable.declare(channel)
+        declarable: Declarable[_] ⇒
+          sender ! declarable.declare(channel, context.system)
       }
       stay()
     case Event(ConnectionDisconnected, Some(channel) %: _ %: _) ⇒

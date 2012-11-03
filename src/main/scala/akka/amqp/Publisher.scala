@@ -64,8 +64,10 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
 
   def publisherUnhandled: StateFunction = {
     case Event(p: Publisher, data) ⇒
+      log.debug("Switching to @ Publisher Mode, Not Available")
       stay() using stateData.toMode(p)
     case Event(cp: ConfirmingPublisher, data) ⇒
+      log.debug("Switching to @ ConfirmingPublisher Mode, Not Available")
       stay() using stateData.toMode(cp)
   }
 
@@ -80,7 +82,6 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
       val s = serialization.findSerializerFor(payload)
       val serialized = s.toBinary(payload)
       val seqNo = channel.getNextPublishSeqNo
-      log.debug("Publishing on '{}': {}", exchangeName, message)
       implicit val timeout = Timeout(settings.publisherConfirmTimeout)
       import ExecutionContext.Implicits.global
       try {
@@ -95,19 +96,21 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
           confirmHandles.remove(seqNo, returnToSender)
       }
       stay()
-    case Event(PublishToExchange(message, exchangeName, _), Some(channel) %: _ %: _) ⇒
+    case Event(PublishToExchange(message, exchangeName, false), Some(channel) %: _ %: _) ⇒
       import message._
-      log.debug("Publishing confirmed on '{}': {}", exchangeName, message)
+      log.debug("Publishing on '{}': {}", exchangeName, message)
       val s = serialization.findSerializerFor(payload)
       val serialized = s.toBinary(payload)
       channel.basicPublish(exchangeName, routingKey, mandatory, immediate, properties.getOrElse(null), serialized)
       stay()
 
     case Event(p @ Publisher(listener), Some(channel) %: _ %: _) ⇒
+      log.debug("Switching to @ Publisher Mode, Available")
       setupPublisher(channel, listener)
       stay() using stateData.toMode(p)
 
     case Event(cp @ ConfirmingPublisher(listener), Some(channel) %: _ %: _) ⇒
+      log.debug("Switching to @ ConfirmingPublisher Mode, Available")
       setupConfirmingPublisher(channel, listener)
 
       stay() using stateData.toMode(cp)

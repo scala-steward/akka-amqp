@@ -85,7 +85,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
         case q: UndeclaredQueue if (q.nameOption.isEmpty) ⇒
           if (defaultQueue.isEmpty) {
             //if the Default Queue is declared, return to sender.
-            val declared = q.declare(channel)
+            val declared = q.declare(channel, context.system)
             defaultQueue = Some(declared)
             sender ! declared
             declared
@@ -95,8 +95,8 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
         case q: UndeclaredQueue ⇒
           val dqOption = uniqueDeclaredQueues.collectFirst { case dq if dq.name == q.nameOption.get ⇒ dq }
           if (dqOption.isEmpty) {
-            val declared = q.declare(channel)
-            uniqueDeclaredQueues = q.declare(channel) :: uniqueDeclaredQueues
+            val declared = q.declare(channel, context.system)
+            uniqueDeclaredQueues = q.declare(channel, context.system) :: uniqueDeclaredQueues
             declared
           } else {
             dqOption.get
@@ -109,13 +109,13 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
       }
 
       val declaredExchange = binding.exchange match {
-        case e: UndeclaredExchange ⇒ e.declare(channel)
+        case e: UndeclaredExchange ⇒ e.declare(channel, context.system)
         case e: DeclaredExchange   ⇒ e
       }
       if (declaredExchange.name != "") { //do not QueueBind the namelessExchange
         //declare queueBinding
         import scala.collection.JavaConverters._
-        require(binding.routingKey != null, "the routingKey must not be null to bind " + declaredExchange.name + " >> " + declaredQueue.name)
+        //require(binding.routingKey != null, "the routingKey must not be null to bind " + declaredExchange.name + " >> " + declaredQueue.name)
         channel.queueBind(declaredQueue.name, declaredExchange.name, binding.routingKey, binding.getArgs.map(_.toMap.asJava).getOrElse(null))
       }
     }
@@ -136,11 +136,13 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
 
   when(Available) {
     case Event(Consumer(listener, autoAck, bindings), Some(channel) %: _ %: _) ⇒
+      log.debug("Switching to Consumer Mode, Available")
       stay() using stateData.toMode(setupConsumer(channel, listener, autoAck, bindings))
   }
 
   def consumerUnhandled: StateFunction = {
     case Event(Consumer(listener, autoAck, bindings), data) ⇒
+      log.debug("Switching to Consumer Mode, Not Available")
       //switch modes and save the message contents so that when we transition back to Available we know how to wire things up
       stay() using stateData.toMode(ConsumerMode(listener, autoAck, bindings, Seq.empty))
   }
