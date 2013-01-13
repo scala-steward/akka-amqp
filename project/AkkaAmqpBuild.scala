@@ -23,9 +23,9 @@ object AkkaAmqpBuild extends Build {
   lazy val standardSettings = Project.defaultSettings ++ formatSettings ++ Seq(
   	resolvers += "Typesafe Repo" at "http://repo.typesafe.com/typesafe/releases/",
     resolvers += "Sonatype OSS Snapshots" at "http://oss.sonatype.org/content/repositories/releases/",
-    organization := "com.github.momania",
+    organization := "com.github.cessationoftime",
     version			 := "2.2-SNAPSHOT",
-    scalaVersion := "2.10.0-RC1"
+    scalaVersion := "2.10.0"
   )
 
   //  lazy val amqp = Project(
@@ -43,7 +43,6 @@ object AkkaAmqpBuild extends Build {
     settings = standardSettings ++ Seq(
     	libraryDependencies ++= Seq( 
 	      AmqpClient,
-        AkkaActor,
 		AkkaAgent,
 	      Specs2,
         JUnit,
