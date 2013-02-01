@@ -89,6 +89,23 @@ class ValidConnectionSpec extends WordSpec with MustMatchers with BeforeAndAfter
       awaitCond(conn.isOpen() == false, 5 seconds, 100 milli)
       shutdown
     }
+    "propagate state transition to child Actors" in new AkkaScope {
+      import ChannelActor.{ Available, Unavailable }
+
+      val channel = Await.result((connectionActor ? CreateChannel(false)).mapTo[akka.actor.ActorRef], 1 second)
+      channel ! SubscribeTransitionCallBack(testActor)
+      expectMsg(CurrentState(channel, Unavailable))
+
+      connectionActor ! Connect
+      expectMsg(Transition(channel, Unavailable, Available))
+
+      connectionActor ! Disconnect
+      expectMsg(Transition(channel, Available, Unavailable))
+
+      // reconnect
+      connectionActor ! Connect
+      expectMsg(Transition(channel, Unavailable, Available))
+    }
     "send new channels to child Actors on reconnect" in pending
     "send disconnect message to child Actors on disconnect" in pending
     "send NewChannel message to child actor upon creation in Connected state" in pending

@@ -151,6 +151,8 @@ class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: a
 
   onTransition {
     case _ -> _ ⇒ isConnectedAgent send (bool ⇒ !bool) //notify the agent that we have changed states.
+  }
+  onTransition {
     case Disconnected -> Connected ⇒
       nextStateData match {
         case Some(connection) ⇒
