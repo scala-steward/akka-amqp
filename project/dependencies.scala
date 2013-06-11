@@ -3,10 +3,10 @@ import sbt._
 object dependencies {
   def Scalatest    = "org.scalatest" % "scalatest_2.10" % "2.0.M6-SNAP5" % "test"   	  // ApacheV2
   def scalaActorsForScalaTest = "org.scala-lang" % "scala-actors" % "2.10.0" % "test"
-  def AmqpClient = "com.rabbitmq" % "amqp-client" % "3.0.4"   													  // ApacheV2
+  def AmqpClient = "com.rabbitmq" % "amqp-client" % "3.1.1"   													  // ApacheV2
 
  
-  def AkkaAgent = "com.typesafe.akka" % "akka-agent_2.10" % "2.1.2"
+  def AkkaAgent = "com.typesafe.akka" % "akka-agent_2.10" % "2.1.4"
 
   def Specs2      = "org.specs2"                 % "specs2_2.10"              % "1.13"        % "test"  // MIT
   def JUnit = "junit" % "junit" % "4.7" % "test"   																 // Common Public License 1.0
