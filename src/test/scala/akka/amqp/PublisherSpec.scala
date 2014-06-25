@@ -41,7 +41,6 @@ class PublisherSpec extends WordSpec with MustMatchers with BeforeAndAfterAll {
   }
 
   "Durable Publisher" should {
-
     "register PublishToExchange and execute immediately when Available" in new FakeScope {
       channelActor.stateName must be === Available
 
@@ -79,6 +78,9 @@ class PublisherSpec extends WordSpec with MustMatchers with BeforeAndAfterAll {
         expectMsgType[ShutdownSignalException]
       } finally { shutdown }
     }
+    // Note: rabbitmq no-longer supports immediate = true. Consider removing from api or implementing work-around
+    // that is described in http://www.rabbitmq.com/blog/2012/11/19/breaking-things-with-rabbitmq-3-0/
+    /*
     "get message returned when sending with immediate flag" in new PublisherScope {
       def exchange = Exchange.nameless
 
@@ -96,6 +98,7 @@ class PublisherSpec extends WordSpec with MustMatchers with BeforeAndAfterAll {
       } finally { shutdown }
 
     }
+     */
     "get message returned when sending with mandatory flag" in new PublisherScope {
       def exchange = Exchange.nameless
       try {

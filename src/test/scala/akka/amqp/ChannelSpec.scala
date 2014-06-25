@@ -52,8 +52,9 @@ class ChannelSpec extends AkkaSpec(AmqpConfig.Valid.config) with AmqpMock {
       Await.ready(latch, 5 seconds).isOpen must be === true
     }
 
-    "request new channel when channel brakes and go to Unavailble" in {
-      channelActor ! new ShutdownSignalException(false, false, "Test", channel)
+    "request new channel when channel breaks and go to Unavailble" in {
+      val method = new com.rabbitmq.client.impl.AMQImpl.Access.RequestOk(1)
+      channelActor ! new ShutdownSignalException(false, false, method, channel)
       channelActor.stateName must be === Unavailable
     }
     "go to Unavailable when connection disconnects" in new TestKit(system) with AmqpMock {
