@@ -24,8 +24,8 @@ object AkkaAmqpBuild extends Build {
     resolvers += "Typesafe Repo" at "http://repo.typesafe.com/typesafe/releases/",
     resolvers += "Sonatype OSS Snapshots" at "http://oss.sonatype.org/content/repositories/releases/",
     organization := "com.github.cessationoftime",
-    version      := "2.2-SNAPSHOT",
-    scalaVersion := "2.11.6"
+    version      := "2.3-SNAPSHOT",
+    scalaVersion := "2.11.7"
   )
 
   //  lazy val amqp = Project(
