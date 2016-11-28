@@ -24,7 +24,7 @@ object AkkaAmqpBuild extends Build {
     resolvers += "Sonatype OSS Snapshots" at "http://oss.sonatype.org/content/repositories/releases/",
     organization := "com.github.cessationoftime",
     version      := "2.4-SNAPSHOT",
-    scalaVersion := "2.11.7"
+    scalaVersion := "2.11.8"
   )
 
   lazy val root = Project(

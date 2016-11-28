@@ -53,6 +53,8 @@ class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: a
   connectionFactory.setUsername(user)
   connectionFactory.setPassword(pass)
   connectionFactory.setVirtualHost(vhost)
+  connectionFactory.setAutomaticRecoveryEnabled(false)
+  connectionFactory.setTopologyRecoveryEnabled(false)
 
   lazy val timeoutGenerator = new ReconnectTimeoutGenerator
 
