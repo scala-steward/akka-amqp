@@ -23,8 +23,8 @@ object AkkaAmqpBuild extends Build {
     resolvers += "Typesafe Repo" at "http://repo.typesafe.com/typesafe/releases/",
     resolvers += "Sonatype OSS Snapshots" at "http://oss.sonatype.org/content/repositories/releases/",
     organization := "com.github.cessationoftime",
-    version      := "2.4-SNAPSHOT",
-    scalaVersion := "2.11.8"
+    version      := "2.5-SNAPSHOT",
+    scalaVersion := "2.12.1"
   )
 
   lazy val root = Project(
@@ -33,13 +33,7 @@ object AkkaAmqpBuild extends Build {
     settings = standardSettings ++ Seq(
       libraryDependencies ++= Seq(
         AmqpClient,
-     		AkkaAgent,
-        Specs2,
-        JUnit,
-		    Scalatest,
-		    scalaActorsForScalaTest,
-        AkkaTestKit,
-        Mockito)
+     		AkkaAgent)
     )
   )
 }
