@@ -100,7 +100,7 @@ class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: a
         case e: Exception ⇒
           log.error(e, "Error while trying to connect")
           val nextReconnectTimeout = timeoutGenerator.nextTimeoutSec(maxReconnectDelay.toSeconds.toInt)
-          setTimer("reconnect", Connect, nextReconnectTimeout seconds, true)
+          setTimer("reconnect", Connect, nextReconnectTimeout.seconds, true)
           log.info("Reconnecting in {} seconds...", nextReconnectTimeout)
           stay()
       }
