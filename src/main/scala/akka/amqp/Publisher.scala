@@ -9,7 +9,7 @@ import scala.concurrent.{ Await, Future }
 import akka.event.Logging
 import akka.serialization.SerializationExtension
 import akka.pattern.ask
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import akka.actor._
 import ChannelActor._
 case class Message(payload: AnyRef,
@@ -34,18 +34,18 @@ sealed trait Confirm
 case object Ack extends Confirm
 case object Nack extends Confirm
 
-trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
+trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
 
   def addReturnListener(channel: RabbitChannel, listener: ActorRef) = {
     channel.addReturnListener(new ReturnListener {
-      def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
+      def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]): Unit = {
         listener ! ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body)
       }
     })
   }
 
   def setupPublisher(channel: RabbitChannel, listener: Option[ActorRef]) = {
-    listener foreach { listener ⇒
+    listener foreach { listener =>
       addReturnListener(channel, listener)
     }
   }
@@ -57,22 +57,22 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
   }
 
   when(Unavailable) {
-    case Event(mess: PublishToExchange, _) ⇒
+    case Event(mess: PublishToExchange, _) =>
       stash()
       stay()
   }
 
   def publisherUnhandled: StateFunction = {
-    case Event(p: Publisher, data) ⇒
+    case Event(p: Publisher, data) =>
       log.debug("Switching to @ Publisher Mode, Not Available")
       stay() using stateData.toMode(p)
-    case Event(cp: ConfirmingPublisher, data) ⇒
+    case Event(cp: ConfirmingPublisher, data) =>
       log.debug("Switching to @ ConfirmingPublisher Mode, Not Available")
       stay() using stateData.toMode(cp)
   }
 
   when(Available) {
-    case Event(PublishToExchange(message, exchangeName, true), Some(channel) %: _ %: ConfirmingPublisher(listener)) ⇒
+    case Event(PublishToExchange(message, exchangeName, true), Some(channel) %: _ %: ConfirmingPublisher(listener)) =>
       //      val confirmPromise = Promise[Confirm]
       //      sender ! confirmPromise
       val returnToSender = sender
@@ -91,12 +91,12 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
         }
         channel.basicPublish(exchangeName, routingKey, mandatory, immediate, properties.getOrElse(null), serialized)
       } catch {
-        case ex: Throwable ⇒
+        case ex: Throwable =>
           unconfirmedSet.remove(seqNo)
           confirmHandles.remove(seqNo, returnToSender)
       }
       stay()
-    case Event(PublishToExchange(message, exchangeName, false), Some(channel) %: _ %: _) ⇒
+    case Event(PublishToExchange(message, exchangeName, false), Some(channel) %: _ %: _) =>
       import message._
       log.debug("Publishing on '{}': {}", exchangeName, message)
       val s = serialization.findSerializerFor(payload)
@@ -104,12 +104,12 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
       channel.basicPublish(exchangeName, routingKey, mandatory, immediate, properties.getOrElse(null), serialized)
       stay()
 
-    case Event(p @ Publisher(listener), Some(channel) %: _ %: _) ⇒
+    case Event(p @ Publisher(listener), Some(channel) %: _ %: _) =>
       log.debug("Switching to @ Publisher Mode, Available")
       setupPublisher(channel, listener)
       stay() using stateData.toMode(p)
 
-    case Event(cp @ ConfirmingPublisher(listener), Some(channel) %: _ %: _) ⇒
+    case Event(cp @ ConfirmingPublisher(listener), Some(channel) %: _ %: _) =>
       log.debug("Switching to @ ConfirmingPublisher Mode, Available")
       setupConfirmingPublisher(channel, listener)
 
@@ -119,11 +119,11 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
   onTransition {
     //really would prefer to just "Let it crash" when a channel disconnects,
     //instead of reloading the state for this actor...not sure how that would work with the autoreconnect functionality though
-    case Unavailable -> Available if nextStateData.isPublisher ⇒
+    case Unavailable -> Available if nextStateData.isPublisher =>
       val Some(channel) %: _ %: Publisher(listener) = nextStateData
       context.self ! Publisher(listener) //switch to modes again before unstashing messages!
       unstashAll()
-    case Unavailable -> Available if nextStateData.isConfirmingPublisher ⇒
+    case Unavailable -> Available if nextStateData.isConfirmingPublisher =>
       val Some(channel) %: _ %: ConfirmingPublisher(listener) = nextStateData
       context.self ! ConfirmingPublisher(listener) //switch to modes again before unstashing messages!
       unstashAll()
@@ -159,7 +159,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
       complete(seqNo)
     }
 
-    def complete(seqNo: Long) {
+    def complete(seqNo: Long): Unit = {
       confirmHandles.remove(seqNo) foreach {
         _ ! (if (ack) Ack else Nack)
       }
@@ -168,16 +168,16 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
 
 }
 
-//trait CanBuildDurablePublisher { durableChannel: DurableConnection#DurableChannel ⇒
+//trait CanBuildDurablePublisher { durableChannel: DurableConnection#DurableChannel =>
 //  def persistentChannel: Boolean
 //  import durableChannel._
 //
 //  def newPublisher(exchange: ExchangeDeclaration): Future[DurablePublisher] =
-//    durableChannel.withChannel(rc ⇒ new DurablePublisher(exchange(rc)))
+//    durableChannel.withChannel(rc => new DurablePublisher(exchange(rc)))
 //
 //  def newPublisher(exchange: DeclaredExchange) = new DurablePublisher(exchange)
 //
-//  trait ChannelPublisherOld { actor: ChannelActor ⇒
+//  trait ChannelPublisherOld { actor: ChannelActor =>
 //    import extension._
 //    val exchange: DeclaredExchange
 //    //implicit val system = durableConnection.connectionProperties.system
@@ -187,8 +187,8 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
 //
 //    val exchangeName = exchange.name
 //
-//    def onReturn(callback: ReturnedMessage ⇒ Unit) {
-//      whenAvailable { channel ⇒
+//    def onReturn(callback: ReturnedMessage => Unit) {
+//      whenAvailable { channel =>
 //        channel.addReturnListener(new ReturnListener {
 //          def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
 //            callback.apply(ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body))
@@ -222,7 +222,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
 //
 //  
 //trait ConfirmingPublisher extends ConfirmListener {
-//  this: CanBuildDurablePublisher#DurablePublisher ⇒
+//  this: CanBuildDurablePublisher#DurablePublisher =>
 //
 //  
 //  val lock : AnyRef = new Object(); 
@@ -234,7 +234,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
 //   */
 //  private val preConfirmed = new ConcurrentHashMap[Long, Confirm]().asScala
 //  
-//  durableChannel.whenAvailable { channel ⇒
+//  durableChannel.whenAvailable { channel =>
 //    channel.confirmSelect()
 //    channel.addConfirmListener(this)
 //  }
@@ -246,7 +246,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor ⇒
 //    val confirmPromise = Promise[Confirm]
 //    val seqNoFuture = (channelActor ? PublishToExchange(message, exchangeName, true)).mapTo[Long]
 //    seqNoFuture.onSuccess {
-//      case seqNo ⇒
+//      case seqNo =>
 //      lock.synchronized {
 //       preConfirmed.remove(seqNo) match {
 //        case Some(confirm) => confirmPromise.success(confirm)

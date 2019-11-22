@@ -1,6 +1,6 @@
 package akka.amqp
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import akka.actor.ActorSystem
 
 object Exchange {
@@ -100,11 +100,11 @@ case class ExchangeToExchangeBinding private[amqp] (source: Exchange,
                                                     routingKey: String,
                                                     arguments: Option[Map[String, AnyRef]] = None) {
 
-  def bind(channel: RabbitChannel) {
+  def bind(channel: RabbitChannel): Unit = {
     channel.exchangeBind(destination.name, source.name, routingKey, arguments.map(_.asJava).getOrElse(null))
   }
 
-  def unbind(channel: RabbitChannel) {
+  def unbind(channel: RabbitChannel): Unit = {
     channel.exchangeUnbind(destination.name, source.name, routingKey, arguments.map(_.asJava).getOrElse(null))
   }
 }

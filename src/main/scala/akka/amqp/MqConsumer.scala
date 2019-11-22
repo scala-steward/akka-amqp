@@ -1,4 +1,4 @@
-package akka.amqp
+//package akka.amqp
 //
 //import akka.actor.Actor
 //import akka.actor.ActorSystem

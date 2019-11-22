@@ -1,48 +1,44 @@
 package akka.amqp
-import akka.agent.Agent
 import akka.actor.FSM.{ UnsubscribeTransitionCallBack, CurrentState, Transition, SubscribeTransitionCallBack }
 import akka.testkit.{ AkkaSpec, TestKit, TestFSMRef }
 import akka.actor.{ ActorSystem, PoisonPill }
+import com.github.fridujo.rabbitmq.mock.MockConnectionFactory
 import scala.concurrent.duration._
 import scala.concurrent.{ Await }
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.Promise
 import akka.pattern.ask
-import org.scalatest.{ WordSpec, BeforeAndAfterAll, Tag, BeforeAndAfter }
-import org.scalatest.matchers.MustMatchers
-class ValidConnectionSpec extends WordSpec with MustMatchers with BeforeAndAfterAll {
+import org.scalatest.{ WordSpec, BeforeAndAfterAll, Tag, BeforeAndAfter, Matchers }
 
-  abstract class AkkaScope extends AkkaSpec(AmqpConfig.Valid.config) with AmqpTest {
-    val connectionStatusAgent = Agent(false)(system.dispatcher)
-    val connectionActor = TestFSMRef(new ConnectionActor(AmqpConfig.Valid.settings, connectionStatusAgent))
-    def isConnected = Await.result(connectionStatusAgent.future(), 5 seconds)
+class ValidConnectionSpec extends WordSpec with BeforeAndAfterAll {
+  abstract class AkkaContext
+    extends AkkaSpec(AmqpConfig.Valid.config)
+    with AmqpTest
+    with AmqpMock {
+      val connectionActor = TestFSMRef(new ConnectionActor(
+          new MockConnectionFactory, AmqpConfig.Valid.settings))
+    }
 
-    /**
-     * If akkaSpec is used in a scope, it's ActorSystem must be shutdown manually, call this at the end of each scope
-     */
-    def shutdown = afterAll
-
+  def withAkkaContext(f: AkkaContext => Any) = {
+    val context = new AkkaContext {}
+    context.beforeAll
+    f(context)
+    context.afterAll
   }
 
   "Durable Connection Actor" should {
-
-    "start disconnected" in new AkkaScope {
-      connectionActor.stateName must be === Disconnected
-      isConnected must be === false
-      shutdown
+    "start disconnected" in withAkkaContext { context =>
+      import context._
+      connectionActor.stateName shouldBe Disconnected
     }
-    "connect" in new AkkaScope {
-      connectionActor.stateName must be === Disconnected
-      isConnected must be === false
+    "connect" in withAkkaContext { context =>
+      import context._
+      connectionActor.stateName shouldBe Disconnected
       connectionActor ! Connect
-      connectionActor.stateName must be === Connected
-      isConnected must be === true
-
-      shutdown
+      connectionActor.stateName shouldBe Connected
     }
-
-    "reconnect on ShutdownSignalException" in new AkkaScope with AmqpMock {
-
+    "reconnect on ShutdownSignalException" in withAkkaContext { context =>
+      import context._
       try {
         within(5 second) {
           connectionActor ! Connect
@@ -56,40 +52,36 @@ class ValidConnectionSpec extends WordSpec with MustMatchers with BeforeAndAfter
       } finally {
         connectionActor ! UnsubscribeTransitionCallBack(testActor)
         testActor ! PoisonPill
-        shutdown
       }
     }
-    "disconnect" in new AkkaScope {
+    "disconnect" in withAkkaContext { context =>
+      import context._
       connectionActor ! Connect
-      isConnected must be === true
-      connectionActor.stateName must be === Connected
+      connectionActor.stateName shouldBe Connected
       connectionActor ! Disconnect
-      connectionActor.stateName must be === Disconnected
-      isConnected must be === false
-      shutdown
+      connectionActor.stateName shouldBe Disconnected
     }
-    "dispose (PoisonPill)" in new AkkaScope {
+    "dispose (PoisonPill)" in withAkkaContext { context =>
+      import context._
       connectionActor ! Connect
       val conn = rabbitConnectionAwait
-      conn.isOpen() must be === true
-      isConnected must be === true
-      connectionActor.stateName must be === Connected
+      conn.isOpen() shouldBe true
+      connectionActor.stateName shouldBe Connected
       connectionActor ! PoisonPill
-      connectionActor.isTerminated must be === true
-      isConnected must be === false
-      conn.isOpen() must be === false //make sure that the connection is really closed.
-      shutdown
+      connectionActor.isTerminated shouldBe true
+      conn.isOpen() shouldBe false //make sure that the connection is really closed.
     }
-    "close the Rabbit Connection when the ActorSystem shuts down" in new AkkaScope {
+    "close the Rabbit Connection when the ActorSystem shuts down" in withAkkaContext { context =>
+      import context._
       connectionActor ! Connect
       val conn: RabbitConnection = rabbitConnectionAwait
-      conn.isOpen() must be === true
-      system.shutdown
+      conn.isOpen() shouldBe true
+      system.terminate
 
       awaitCond(conn.isOpen() == false, 5 seconds, 100 milli)
-      shutdown
     }
-    "propagate state transition to child Actors" in new AkkaScope {
+    "propagate state transition to child Actors" in withAkkaContext { context =>
+      import context._
       import ChannelActor.{ Available, Unavailable }
 
       val channel = Await.result((connectionActor ? CreateChannel(false)).mapTo[akka.actor.ActorRef], 1 second)
@@ -112,17 +104,14 @@ class ValidConnectionSpec extends WordSpec with MustMatchers with BeforeAndAfter
     "do not send NewChannel message to child actor upon creation in Disconnected state" in pending
 
     "Durable Connection" should {
-      "execute callback on connection when connected" in new AkkaScope {
+      "execute callback on connection when connected" in withAkkaContext { context =>
+        import context._
         connectionActor ! Connect
-        try {
-          connectionActor ! SubscribeTransitionCallBack(testActor)
-          expectMsg(CurrentState(connectionActor, Connected))
-          val portFuture = withConnection(_.getPort)
-          val promise = Promise.successful(5672).future
-          Await.ready(portFuture, 5 seconds).value must be === Await.ready(promise, 5 seconds).value
-        } finally {
-          shutdown
-        }
+        connectionActor ! SubscribeTransitionCallBack(testActor)
+        expectMsg(CurrentState(connectionActor, Connected))
+        val portFuture = withConnection(_.getPort)
+        val promise = Promise.successful(5672).future
+        Await.ready(portFuture, 5 seconds).value shouldBe Await.ready(promise, 5 seconds).value
       }
     }
   }
@@ -131,20 +120,18 @@ class ValidConnectionSpec extends WordSpec with MustMatchers with BeforeAndAfter
 class NoConnectionSpec extends AkkaSpec(AmqpConfig.Invalid.config) {
   "Durable Connection" should {
     "never connect using non existing host addresses" in {
-      val connectionStatusAgent = akka.agent.Agent(false)(system.dispatcher)
-      val connectionActor = TestFSMRef(new ConnectionActor(AmqpConfig.Invalid.settings, connectionStatusAgent))
+      val connectionActor = TestFSMRef(new ConnectionActor(new ConnectionFactory, AmqpConfig.Invalid.settings))
       try {
         connectionActor ! Connect
         within(2500 milli) {
           connectionActor ! SubscribeTransitionCallBack(testActor)
           expectMsg(CurrentState(connectionActor, Disconnected))
         }
-        connectionActor.stateName must be === Disconnected
+        connectionActor.stateName shouldBe Disconnected
       } finally {
         testActor ! PoisonPill
         connectionActor ! Disconnect // to cancel reconnect timer
         connectionActor ! PoisonPill
-        afterAll //shutdown the ActorSystem
       }
     }
   }

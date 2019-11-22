@@ -13,7 +13,7 @@
 //
 //  val deliveryHandler = system.actorOf(Props(new Actor {
 //    def receive = {
-//      case delivery @ Delivery(payload, routingKey, deliveryTag, isRedeliver, properties, sender) ⇒
+//      case delivery @ Delivery(payload, routingKey, deliveryTag, isRedeliver, properties, sender) =>
 //        println("D: " + new String(payload))
 //
 //        delivery.acknowledge()
@@ -29,7 +29,7 @@
 //
 //  val publisher = ext.connection.newStashingPublisher(DefaultExchange)
 //
-//  for (i ← 1 to nrOfMessages) {
+//  for (i <- 1 to nrOfMessages) {
 //    publisher.publish(Message("Message[%s]".format(i).getBytes, "test"))
 //  }
 //

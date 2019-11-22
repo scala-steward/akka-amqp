@@ -32,11 +32,11 @@ case class Delivery(payload: Array[Byte],
                     properties: BasicProperties,
                     channelActor: ActorRef) {
 
-  def acknowledge(deliveryTag: Long, multiple: Boolean = false) {
+  def acknowledge(deliveryTag: Long, multiple: Boolean = false): Unit = {
     if (!channelActor.isTerminated) channelActor ! OnlyIfAvailable(_.basicAck(deliveryTag, multiple))
   }
 
-  def reject(deliveryTag: Long, reQueue: Boolean = false) {
+  def reject(deliveryTag: Long, reQueue: Boolean = false): Unit = {
     if (!channelActor.isTerminated) channelActor ! OnlyIfAvailable(_.basicReject(deliveryTag, reQueue))
   }
 }
@@ -65,7 +65,7 @@ case class Delivery(payload: Array[Byte],
 //    
 //}
 case object StopConsuming
-trait ChannelConsumer { channelActor: ChannelActor ⇒
+trait ChannelConsumer { channelActor: ChannelActor =>
 
   /**
    * declare QueueBindings if given, declare Queue and Exchange if they were given to the QueueBinding as undeclared
@@ -79,16 +79,16 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
     var uniqueDeclaredQueues = List.empty[DeclaredQueue]
     var uniqueDeclaredExchanges = List.empty[DeclaredExchange]
     var defaultQueue: Option[DeclaredQueue] = None
-    bindings foreach { binding ⇒
+    bindings foreach { binding =>
 
       val declaredExchange = binding.exchange match {
-        case e: UndeclaredExchange ⇒ e.declare(channel, context.system)
-        case e: DeclaredExchange   ⇒ e
+        case e: UndeclaredExchange => e.declare(channel, context.system)
+        case e: DeclaredExchange   => e
       }
 
       //add to declaredQueues on declare, so that declaredQueues is unique
       val declaredQueue = binding.queue match {
-        case q: UndeclaredQueue if (q.nameOption.isEmpty) ⇒
+        case q: UndeclaredQueue if (q.nameOption.isEmpty) =>
           if (defaultQueue.isEmpty) {
             //if the Default Queue is declared, return to sender.
             val declared = q.declare(channel, context.system)
@@ -98,8 +98,8 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
           } else {
             defaultQueue.get
           }
-        case q: UndeclaredQueue ⇒
-          val dqOption = uniqueDeclaredQueues.collectFirst { case dq if dq.name == q.nameOption.get ⇒ dq }
+        case q: UndeclaredQueue =>
+          val dqOption = uniqueDeclaredQueues.collectFirst { case dq if dq.name == q.nameOption.get => dq }
           if (dqOption.isEmpty) {
             val declared = q.declare(channel, context.system)
             uniqueDeclaredQueues = declared :: uniqueDeclaredQueues
@@ -107,7 +107,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
           } else {
             dqOption.get
           }
-        case q: DeclaredQueue ⇒
+        case q: DeclaredQueue =>
           if (!uniqueDeclaredQueues.contains(q)) {
             uniqueDeclaredQueues = q :: uniqueDeclaredQueues
           }
@@ -116,7 +116,7 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
 
       if (declaredExchange.name != "") { //do not QueueBind the namelessExchange
         //declare queueBinding
-        import scala.collection.JavaConverters._
+        import scala.jdk.CollectionConverters._
         //require(binding.routingKey != null, "the routingKey must not be null to bind " + declaredExchange.name + " >> " + declaredQueue.name)
         val ok = channel.queueBind(declaredQueue.name, declaredExchange.name, binding.routingKey, binding.getArgs.map(_.toMap.asJava).getOrElse(null))
         context.system.eventStream.publish(NewlyDeclared(DeclaredQueueBinding(Some(ok), declaredQueue, declaredExchange, binding)))
@@ -125,9 +125,9 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
 
     val distinctlyNamedQueues = defaultQueue.toList ::: uniqueDeclaredQueues
 
-    val tags = distinctlyNamedQueues map { queue ⇒
+    val tags = distinctlyNamedQueues map { queue =>
       val tag = channel.basicConsume(queue.name, autoAck, new DefaultConsumer(channel) {
-        override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
+        override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]): Unit = {
           import envelope._
           listener ! Delivery(body, getRoutingKey, getDeliveryTag, isRedeliver, properties, context.self)
         }
@@ -138,15 +138,15 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
   }
 
   when(Available) {
-    case Event(Consumer(listener, autoAck, bindings), Some(channel) %: _ %: _) ⇒
+    case Event(Consumer(listener, autoAck, bindings), Some(channel) %: _ %: _) =>
       log.debug("Switching to Consumer Mode, Available")
       stay() using stateData.toMode(setupConsumer(channel, listener, autoAck, bindings))
-    case Event(StopConsuming, ChannelData(Some(channel), _, cm: ConsumerMode)) ⇒
+    case Event(StopConsuming, ChannelData(Some(channel), _, cm: ConsumerMode)) =>
       stay() using stateData.toMode(cm cancelTags channel);
   }
 
   def consumerUnhandled: StateFunction = {
-    case Event(Consumer(listener, autoAck, bindings), data) ⇒
+    case Event(Consumer(listener, autoAck, bindings), data) =>
       log.debug("Switching to Consumer Mode, Not Available")
       //switch modes and save the message contents so that when we transition back to Available we know how to wire things up
       stay() using stateData.toMode(ConsumerMode(listener, autoAck, bindings, Seq.empty))
@@ -156,14 +156,14 @@ trait ChannelConsumer { channelActor: ChannelActor ⇒
   onTransition {
     //really would prefer to just "Let it crash" when a channel disconnects,
     //instead of reloading the state for this actor...not sure how that would work with the autoreconnect functionality though
-    case Unavailable -> Available if nextStateData.isConsumer ⇒
+    case Unavailable -> Available if nextStateData.isConsumer =>
       val _ %: _ %: ConsumerMode(listener, autoAck, bindings, _) = nextStateData
       context.self ! Consumer(listener, autoAck, bindings) //switch to modes again before unstashing messages!
       unstashAll()
   }
 
   def consumerTermination: PartialFunction[StopEvent, Unit] = {
-    case StopEvent(_, state, ChannelData(Some(channel), callbacks, cm: ConsumerMode)) ⇒
+    case StopEvent(_, state, ChannelData(Some(channel), callbacks, cm: ConsumerMode)) =>
       log.debug("\n\n\nConsumer terminating\n\n\n")
       cm.cancelTags(channel)
       terminateWhenActive(channel)

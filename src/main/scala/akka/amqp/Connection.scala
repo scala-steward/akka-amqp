@@ -19,7 +19,7 @@ case object Connected extends ConnectionState
 sealed trait ConnectionMessage
 case object Connect extends ConnectionMessage
 case object Disconnect extends ConnectionMessage
-case class WithConnection[T](callback: RabbitConnection ⇒ T) extends ConnectionMessage
+case class WithConnection[T](callback: RabbitConnection => T) extends ConnectionMessage
 
 private[amqp] class ReconnectTimeoutGenerator {
 
@@ -37,18 +37,17 @@ private[amqp] class ReconnectTimeoutGenerator {
     }
   }
 
-  def reset() {
+  def reset(): Unit = {
     currentTimeout = 1
     previousTimeout = 1
   }
 }
 case class CreateChannel(stashMessages: Boolean = true)
 
-class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: akka.agent.Agent[Boolean])
+class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, settings: AmqpSettings)
   extends Actor with FSM[ConnectionState, Option[RabbitConnection]] with ShutdownListener {
 
   import settings._
-  val connectionFactory = new ConnectionFactory()
   connectionFactory.setRequestedHeartbeat(amqpHeartbeat.toSeconds.toInt)
   connectionFactory.setUsername(user)
   connectionFactory.setPassword(pass)
@@ -82,11 +81,11 @@ class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: a
   startWith(Disconnected, None)
 
   when(Disconnected) {
-    case Event(CreateChannel(stashMessages), _) ⇒
+    case Event(CreateChannel(stashMessages), _) =>
       val channelActor = newChannelActor(stashMessages)
       sender ! channelActor //return channelActor to sender, but in a disconnected state
       stay()
-    case Event(Connect, _) ⇒
+    case Event(Connect, _) =>
       log.info("Connecting to one of [{}]", addresses.mkString(", "))
       try {
         val connection = connectionFactory.newConnection(executorService, addresses.map(RabbitAddress.parseAddress).toArray)
@@ -97,45 +96,45 @@ class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: a
 
         goto(Connected) using Some(connection)
       } catch {
-        case e: Exception ⇒
+        case e: Exception =>
           log.error(e, "Error while trying to connect")
           val nextReconnectTimeout = timeoutGenerator.nextTimeoutSec(maxReconnectDelay.toSeconds.toInt)
-          setTimer("reconnect", Connect, nextReconnectTimeout.seconds, true)
+          startTimerWithFixedDelay("reconnect", Connect, nextReconnectTimeout.seconds)
           log.info("Reconnecting in {} seconds...", nextReconnectTimeout)
           stay()
       }
-    case Event(Disconnect, _) ⇒
+    case Event(Disconnect, _) =>
       cancelTimer("reconnect")
       log.info("Already disconnected")
       stay()
-    case Event(cause: ShutdownSignalException, _) ⇒
+    case Event(cause: ShutdownSignalException, _) =>
       stay()
   }
 
   when(Connected) {
-    case Event(RequestNewChannel, Some(connection)) ⇒
+    case Event(RequestNewChannel, Some(connection)) =>
       //a channel must have broken, send the ChannelActor back a new one.
       sender ! NewChannel(connection.createChannel)
       stay()
-    case Event(CreateChannel(persistent), Some(connection)) ⇒
+    case Event(CreateChannel(persistent), Some(connection)) =>
       val channelActor = newChannelActor(persistent)
       //give the channelActor it's first channel
       channelActor ! NewChannel(connection.createChannel)
       sender ! channelActor //return channelActor to sender
       stay()
 
-    case Event(WithConnection(callback), Some(connection)) ⇒
+    case Event(WithConnection(callback), Some(connection)) =>
       stay() replying callback(connection)
-    case Event(Disconnect, Some(connection)) ⇒
+    case Event(Disconnect, Some(connection)) =>
       try {
         log.debug("Disconnecting from {}", connection)
         connection.close()
         log.info("Successfully disconnected from {}", connection)
       } catch {
-        case e: Exception ⇒ log.error(e, "Error while closing connection")
+        case e: Exception => log.error(e, "Error while closing connection")
       }
       goto(Disconnected)
-    case Event(cause: ShutdownSignalException, Some(connection)) ⇒
+    case Event(cause: ShutdownSignalException, Some(connection)) =>
       if (cause.isHardError) {
         log.error(cause, "Connection broke down {}", connection)
 
@@ -152,18 +151,15 @@ class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: a
   }
 
   onTransition {
-    case _ -> _ ⇒ isConnectedAgent send (bool ⇒ !bool) //notify the agent that we have changed states.
-  }
-  onTransition {
-    case Disconnected -> Connected ⇒
+    case Disconnected -> Connected =>
       nextStateData match {
-        case Some(connection) ⇒
+        case Some(connection) =>
           //send new channels to the child ChannelActors so they can reconnect
           context.children foreach { _ ! NewChannel(connection.createChannel) }
-        case None ⇒ //should never happen 
+        case None => //should never happen 
           throw new Exception("The Connected state should never be without a connection!")
       }
-    case Connected -> Disconnected ⇒
+    case Connected -> Disconnected =>
       //notify children of the disconnect
       context.children foreach { _ ! ConnectionDisconnected }
 
@@ -172,18 +168,17 @@ class ConnectionActor private[amqp] (settings: AmqpSettings, isConnectedAgent: a
   initialize
 
   onTermination {
-    case StopEvent(reason, state, connectionOption) ⇒
-      stateData foreach { c ⇒
+    case StopEvent(reason, state, connectionOption) =>
+      stateData foreach { c =>
         Exception.ignoring(classOf[AlreadyClosedException]) {
           c.close()
         }
       }
-      isConnectedAgent send false
       log.debug("Successfully disposed")
       executorService.shutdown()
   }
 
-  def shutdownCompleted(cause: ShutdownSignalException) {
+  def shutdownCompleted(cause: ShutdownSignalException): Unit = {
     self ! cause
   }
 }
@@ -192,17 +187,17 @@ private[amqp] case class NewChannel(channel: RabbitChannel)
 private[amqp] object ConnectionDisconnected
 //private[amqp] object ConnectionConnected {
 //  def unapply(msg: Any) = msg match {
-//    case Transition(connection, _, Connected) ⇒ Some(connection)
-//    case CurrentState(connection, Connected)  ⇒ Some(connection)
-//    case _                                    ⇒ None
+//    case Transition(connection, _, Connected) => Some(connection)
+//    case CurrentState(connection, Connected)  => Some(connection)
+//    case _                                    => None
 //  }
 //}
 //
 //private[amqp] object ConnectionDisconnected {
 //  def unapply(msg: Any) = msg match {
-//    case Transition(_, _, Disconnected) ⇒ true
-//    case CurrentState(_, Disconnected)  ⇒ true
-//    case _                              ⇒ false
+//    case Transition(_, _, Disconnected) => true
+//    case CurrentState(_, Disconnected)  => true
+//    case _                              => false
 //  }
 //}
 
@@ -236,7 +231,7 @@ private[amqp] object ConnectionDisconnected
 //override protected val connection = this
 //import extension._
 //  
-////  def withConnection[T : reflect.ClassTag](callback: RabbitConnection ⇒ T): Future[T] = {
+////  def withConnection[T : reflect.ClassTag](callback: RabbitConnection => T): Future[T] = {
 ////    import ExecutionContext.Implicits.global
 ////    implicit val timeout = Timeout(settings.interactionTimeout)
 ////    (durableConnectionActor ? WithConnection(callback)).mapTo[T]

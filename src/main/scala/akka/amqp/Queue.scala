@@ -1,6 +1,6 @@
 package akka.amqp
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import java.io.IOException
 import akka.actor.ActorSystem
 
@@ -13,7 +13,7 @@ object Queue {
   //      case ex: IOException => Left(ex)
   //    }
   //  }  
-  //  private def ioException(declare: RabbitChannel ⇒ RabbitQueue.DeclareOk)(channel: RabbitChannel): akka.amqp.DeclaredQueue =
+  //  private def ioException(declare: RabbitChannel => RabbitQueue.DeclareOk)(channel: RabbitChannel): akka.amqp.DeclaredQueue =
   //    declare(channel)
 
   /**
@@ -57,7 +57,7 @@ trait Queue {
   def params: Option[QueueParams]
   def isUndeclaredDefaultQueue = nameOption.isEmpty
 }
-trait UndeclaredQueue extends Declarable[DeclaredQueue] { queue: Queue ⇒
+trait UndeclaredQueue extends Declarable[DeclaredQueue] { queue: Queue =>
   def declare(implicit channel: RabbitChannel, system: ActorSystem): DeclaredQueue
 }
 
@@ -116,11 +116,11 @@ case class DeclaredQueue(peer: RabbitQueue.DeclareOk, params: Option[QueueParams
   def messageCount = peer.getMessageCount()
   def consumerCount = peer.getConsumerCount()
 
-  def purge(implicit channel: RabbitChannel) {
+  def purge(implicit channel: RabbitChannel): Unit = {
     channel.queuePurge(name)
   }
 
-  def delete(ifUnused: Boolean, ifEmpty: Boolean)(implicit channel: RabbitChannel) {
+  def delete(ifUnused: Boolean, ifEmpty: Boolean)(implicit channel: RabbitChannel): Unit = {
     channel.queueDelete(name, ifUnused, ifEmpty)
   }
 
@@ -136,7 +136,7 @@ object QueueBinding {
   /**
    * This will connect the Consumer to one or more Queues without any QueueBindings, only the Queue is declared.
    */
-  def apply(queue: Queue*): Seq[QueueBinding] = queue map (q ⇒ Exchange.nameless >> q)
+  def apply(queue: Queue*): Seq[QueueBinding] = queue map (q => Exchange.nameless >> q)
 }
 
 trait QueueBinding extends Declarable[DeclaredQueueBinding] {
@@ -146,15 +146,15 @@ trait QueueBinding extends Declarable[DeclaredQueueBinding] {
   def getArgs: Option[Seq[(String, AnyRef)]]
   protected def declaredExchange(implicit channel: RabbitChannel, system: ActorSystem): DeclaredExchange = {
     exchange match {
-      case ed: UndeclaredExchange             ⇒ ed.declare
-      case declaredExchange: DeclaredExchange ⇒ declaredExchange
+      case ed: UndeclaredExchange             => ed.declare
+      case declaredExchange: DeclaredExchange => declaredExchange
     }
   }
 
   protected def declaredQueue(implicit channel: RabbitChannel, system: ActorSystem): DeclaredQueue = {
     queue match {
-      case ed: UndeclaredQueue          ⇒ ed.declare
-      case declaredQueue: DeclaredQueue ⇒ declaredQueue
+      case ed: UndeclaredQueue          => ed.declare
+      case declaredQueue: DeclaredQueue => declaredQueue
     }
   }
 

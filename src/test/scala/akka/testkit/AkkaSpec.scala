@@ -1,29 +1,29 @@
-/**
- * Copyright (C) 2009-2012 Typesafe Inc. <http://www.typesafe.com>
+/*
+ * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
  */
+
 package akka.testkit
 
-import language.{ postfixOps, reflectiveCalls }
-import scala.concurrent.Future
-import org.scalatest.{ WordSpec, WordSpecLike, BeforeAndAfterAll, Tag }
-import org.scalatest.matchers.MustMatchers
-import _root_.akka.actor.{ Actor, ActorRef, Props, ActorSystem, PoisonPill, DeadLetter }
-import _root_.akka.event.{ Logging, LoggingAdapter }
-import scala.concurrent.duration._
-import scala.concurrent.Await
-import com.typesafe.config.{ Config, ConfigFactory }
-import java.util.concurrent.TimeoutException
-import _root_.akka.dispatch.{ MessageDispatcher, Dispatchers }
-import _root_.akka.pattern.ask
-import _root_.akka.actor.ActorSystemImpl
+import org.scalactic.{ CanEqual, TypeCheckedTripleEquals }
 
-object TimingTest extends Tag("timing")
-object LongRunningTest extends Tag("long-running")
+import language.postfixOps
+import org.scalatest.{ BeforeAndAfterAll, WordSpecLike }
+import org.scalatest.Matchers
+import akka.actor.ActorSystem
+import akka.event.{ Logging, LoggingAdapter }
+
+import scala.concurrent.duration._
+import scala.concurrent.Future
+import com.typesafe.config.{ Config, ConfigFactory }
+import akka.dispatch.Dispatchers
+import akka.testkit.TestEvent._
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.time.{ Millis, Span }
 
 object AkkaSpec {
   val testConf: Config = ConfigFactory.parseString("""
       akka {
-        loggers = [akka.testkit.TestEventListener]
+        loggers = ["akka.testkit.TestEventListener"]
         loglevel = "WARNING"
         stdout-loglevel = "WARNING"
         actor {
@@ -37,18 +37,21 @@ object AkkaSpec {
           }
         }
       }
-      """)
+                                                    """)
 
   def mapToConfig(map: Map[String, Any]): Config = {
-    import scala.collection.JavaConverters._
+    import akka.util.ccompat.JavaConverters._
     ConfigFactory.parseMap(map.asJava)
   }
 
   def getCallerName(clazz: Class[_]): String = {
-    val s = Thread.currentThread.getStackTrace map (_.getClassName) drop 1 dropWhile (_ matches ".*AkkaSpec.?$")
+    val s = Thread.currentThread.getStackTrace
+      .map(_.getClassName)
+      .drop(1)
+      .dropWhile(_.matches("(java.lang.Thread|.*AkkaSpec.*|.*\\.StreamSpec.*|.*MultiNodeSpec.*|.*\\.Abstract.*)"))
     val reduced = s.lastIndexWhere(_ == clazz.getName) match {
-      case -1 ⇒ s
-      case z  ⇒ s drop (z + 1)
+      case -1 => s
+      case z  => s.drop(z + 1)
     }
     reduced.head.replaceFirst(""".*\.""", "").replaceAll("[^a-zA-Z_0-9]", "_")
   }
@@ -56,124 +59,68 @@ object AkkaSpec {
 }
 
 abstract class AkkaSpec(_system: ActorSystem)
-  extends TestKit(_system) with WordSpecLike with MustMatchers with BeforeAndAfterAll {
+    extends TestKit(_system)
+    with WordSpecLike
+    with Matchers
+    with BeforeAndAfterAll
+    with WatchedByCoroner
+    with TypeCheckedTripleEquals
+    with ScalaFutures {
 
-  def this(config: Config) = this(ActorSystem(AkkaSpec.getCallerName(getClass).filterNot(_ == '_'),
-    ConfigFactory.load(config.withFallback(AkkaSpec.testConf))))
+  implicit val patience = PatienceConfig(testKitSettings.DefaultTimeout.duration, Span(100, Millis))
+
+  def this(config: Config) =
+    this(ActorSystem(AkkaSpec.getCallerName(getClass), ConfigFactory.load(config.withFallback(AkkaSpec.testConf))))
 
   def this(s: String) = this(ConfigFactory.parseString(s))
 
   def this(configMap: Map[String, _]) = this(AkkaSpec.mapToConfig(configMap))
 
-  def this() = this(ActorSystem(AkkaSpec.getCallerName(getClass).filterNot(_ == '_'), AkkaSpec.testConf))
+  def this() = this(ActorSystem(AkkaSpec.getCallerName(getClass), AkkaSpec.testConf))
 
   val log: LoggingAdapter = Logging(system, this.getClass)
 
-  final override def beforeAll {
+  override val invokeBeforeAllAndAfterAllEvenIfNoTestsAreExpected = true
+
+  final override def beforeAll: Unit = {
+    startCoroner()
     atStartup()
   }
 
-  final override def afterAll {
-    beforeShutdown()
-    system.shutdown()
-    try system.awaitTermination(5 seconds) catch {
-      case _: TimeoutException ⇒
-        system.log.warning("Failed to stop [{}] within 5 seconds", system.name)
-        println(system.asInstanceOf[ActorSystemImpl].printTree)
-    }
-    atTermination()
+  final override def afterAll: Unit = {
+    beforeTermination()
+    shutdown()
+    afterTermination()
+    stopCoroner()
   }
 
-  protected def atStartup() {}
+  protected def atStartup(): Unit = {}
 
-  protected def beforeShutdown() {}
+  protected def beforeTermination(): Unit = {}
 
-  protected def atTermination() {}
+  protected def afterTermination(): Unit = {}
 
-  def spawn(dispatcherId: String = Dispatchers.DefaultDispatcherId)(body: ⇒ Unit): Unit =
+  def spawn(dispatcherId: String = Dispatchers.DefaultDispatcherId)(body: => Unit): Unit =
     Future(body)(system.dispatchers.lookup(dispatcherId))
-}
 
-@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class AkkaSpecSpec extends WordSpec with MustMatchers {
+  override def expectedTestDuration: FiniteDuration = 60 seconds
 
-  "An AkkaSpec" must {
-
-    "warn about unhandled messages" in {
-      implicit val system = ActorSystem("AkkaSpec0", AkkaSpec.testConf)
-      try {
-        val a = system.actorOf(Props.empty)
-        EventFilter.warning(start = "unhandled message", occurrences = 1) intercept {
-          a ! 42
-        }
-      } finally {
-        system.shutdown()
-      }
+  def muteDeadLetters(messageClasses: Class[_]*)(sys: ActorSystem = system): Unit =
+    if (!sys.log.isDebugEnabled) {
+      def mute(clazz: Class[_]): Unit =
+        sys.eventStream.publish(Mute(DeadLettersFilter(clazz)(occurrences = Int.MaxValue)))
+      if (messageClasses.isEmpty) mute(classOf[AnyRef])
+      else messageClasses.foreach(mute)
     }
 
-    "terminate all actors" in {
-      // verbose config just for demonstration purposes, please leave in in case of debugging
-      import scala.collection.JavaConverters._
-      val conf = Map(
-        "akka.actor.debug.lifecycle" -> true, "akka.actor.debug.event-stream" -> true,
-        "akka.loglevel" -> "DEBUG", "akka.stdout-loglevel" -> "DEBUG")
-      val system = ActorSystem("AkkaSpec1", ConfigFactory.parseMap(conf.asJava).withFallback(AkkaSpec.testConf))
-      val spec = new AkkaSpec(system) { val ref = Seq(testActor, system.actorOf(Props.empty, "name")) }
-      spec.ref foreach (_.isTerminated must not be true)
-      system.shutdown()
-      spec.awaitCond(spec.ref forall (_.isTerminated), 2 seconds)
+  // for ScalaTest === compare of Class objects
+  implicit def classEqualityConstraint[A, B]: CanEqual[Class[A], Class[B]] =
+    new CanEqual[Class[A], Class[B]] {
+      def areEqual(a: Class[A], b: Class[B]) = a == b
     }
 
-    "must stop correctly when sending PoisonPill to rootGuardian" in {
-      val system = ActorSystem("AkkaSpec2", AkkaSpec.testConf)
-      val spec = new AkkaSpec(system) {}
-      val latch = new TestLatch(1)(system)
-      system.registerOnTermination(latch.countDown())
-
-      system.actorFor("/") ! PoisonPill
-
-      Await.ready(latch, 2 seconds)
+  implicit def setEqualityConstraint[A, T <: Set[_ <: A]]: CanEqual[Set[A], T] =
+    new CanEqual[Set[A], T] {
+      def areEqual(a: Set[A], b: T) = a == b
     }
-
-    "must enqueue unread messages from testActor to deadLetters" in {
-      val system, otherSystem = ActorSystem("AkkaSpec3", AkkaSpec.testConf)
-
-      try {
-        var locker = Seq.empty[DeadLetter]
-        implicit val timeout = TestKitExtension(system).DefaultTimeout
-        implicit val davyJones = otherSystem.actorOf(Props(new Actor {
-          def receive = {
-            case m: DeadLetter ⇒ locker :+= m
-            case "Die!"        ⇒ sender ! "finally gone"; context.stop(self)
-          }
-        }), "davyJones")
-
-        system.eventStream.subscribe(davyJones, classOf[DeadLetter])
-
-        val probe = new TestProbe(system)
-        probe.ref ! 42
-        /*
-       * this will ensure that the message is actually received, otherwise it
-       * may happen that the system.stop() suspends the testActor before it had
-       * a chance to put the message into its private queue
-       */
-        probe.receiveWhile(1 second) {
-          case null ⇒
-        }
-
-        val latch = new TestLatch(1)(system)
-        system.registerOnTermination(latch.countDown())
-        system.shutdown()
-        Await.ready(latch, 2 seconds)
-        Await.result(davyJones ? "Die!", timeout.duration) must be === "finally gone"
-
-        // this will typically also contain log messages which were sent after the logger shutdown
-        locker must contain(DeadLetter(42, davyJones, probe.ref))
-      } finally {
-        system.shutdown()
-        otherSystem.shutdown()
-      }
-    }
-
-  }
 }

@@ -1,7 +1,7 @@
 package akka.amqp
 
 import org.mockito.stubbing.Answer
-import org.scalatest.mock.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 import org.mockito.Mockito._
 import org.mockito.Matchers._
 import org.mockito.invocation.InvocationOnMock
@@ -11,8 +11,6 @@ import scala.concurrent.duration._
 import scala.concurrent.Future
 import reflect.ClassTag
 import akka.testkit.TestFSMRef
-import akka.testkit.AkkaSpec
-import akka.agent.Agent
 
 trait AmqpTest {
   import akka.actor._
@@ -21,10 +19,10 @@ trait AmqpTest {
   implicit val to = akka.util.Timeout(5 seconds)
   implicit def system: ActorSystem
   def connectionActor: ActorRef
-  def rabbitConnectionAwait = Await.result((connectionActor ? WithConnection(x ⇒ x)).mapTo[RabbitConnection], 5 seconds)
-  def withConnectionAwait[T: ClassTag](callback: RabbitConnection ⇒ T)(duration: Duration) = Await.result(withConnection(callback), duration)
+  def rabbitConnectionAwait = Await.result((connectionActor ? WithConnection(x => x)).mapTo[RabbitConnection], 5 seconds)
+  def withConnectionAwait[T: ClassTag](callback: RabbitConnection => T)(duration: Duration) = Await.result(withConnection(callback), duration)
 
-  def withConnection[T: ClassTag](callback: RabbitConnection ⇒ T): Future[T] = {
+  def withConnection[T: ClassTag](callback: RabbitConnection => T): Future[T] = {
 
     (connectionActor ? WithConnection(callback)).mapTo[T]
   }
@@ -42,8 +40,8 @@ trait AmqpMock extends MockitoSugar {
   /**
    * allows one to more easily find out how many times a method was executed
    */
-  def answer[T, Y](x: T)(xMethod: T ⇒ Y) = setupAnswer(x)(xMethod)(_ ⇒ ())
-  def setupAnswer[T, Y](x: T)(xMethod: T ⇒ Y)(runnableAnswer: InvocationOnMock ⇒ Unit = _ ⇒ ()): MyAnswer = {
+  def answer[T, Y](x: T)(xMethod: T => Y) = setupAnswer(x)(xMethod)(_ => ())
+  def setupAnswer[T, Y](x: T)(xMethod: T => Y)(runnableAnswer: InvocationOnMock => Unit = _ => ()): MyAnswer = {
     val answer = new MyAnswer(runnableAnswer)
 
     xMethod(doAnswer(answer).when(x))
@@ -53,7 +51,7 @@ trait AmqpMock extends MockitoSugar {
 
 }
 
-class MyAnswer(invoke: InvocationOnMock ⇒ Unit) extends Answer[Unit] {
+class MyAnswer(invoke: InvocationOnMock => Unit) extends Answer[Unit] {
   val lock: AnyRef = new Object
   @volatile
   private var runCount: Int = 0

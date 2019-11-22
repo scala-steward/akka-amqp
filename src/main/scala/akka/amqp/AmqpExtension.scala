@@ -10,7 +10,6 @@ import akka.actor.ActorSystem
 import scala.concurrent.Future
 import scala.concurrent.Await
 import reflect.ClassTag
-import akka.agent.Agent
 import akka.pattern.ask
 import scala.concurrent.duration._
 object AmqpExtension extends ExtensionId[AmqpExtensionImpl] with ExtensionIdProvider {
@@ -23,10 +22,7 @@ class AmqpExtensionImpl(implicit val _system: ActorSystem) extends Extension {
   implicit val settings = new AmqpSettings(_system.settings.config.getConfig("akka.amqp.default"))
   implicit val extension = this
 
-  protected val connectionStatusAgent = Agent(false)(_system.dispatcher)
-  def isConnected = connectionStatusAgent.get
-
-  val connectionActor = _system.actorOf(Props(new ConnectionActor(settings, connectionStatusAgent)), "amqp-connection")
+  val connectionActor = _system.actorOf(Props(new ConnectionActor(new ConnectionFactory, settings)), "amqp-connection")
 
   def createChannel = {
     implicit val to = akka.util.Timeout(5.seconds)
@@ -35,9 +31,9 @@ class AmqpExtensionImpl(implicit val _system: ActorSystem) extends Extension {
 
   //private implicit val timeout = akka.util.Timeout(settings.interactionTimeout)
 
-  def withTempChannel[T: ClassTag](callback: RabbitChannel ⇒ T): Future[T] = {
+  def withTempChannel[T: ClassTag](callback: RabbitChannel => T): Future[T] = {
     ???
-    //    withConnection { conn ⇒
+    //    withConnection { conn =>
     //      val ch = conn.createChannel()
     //      try {
     //        callback(ch)
@@ -51,18 +47,18 @@ class AmqpExtensionImpl(implicit val _system: ActorSystem) extends Extension {
 
 class AmqpSettings(config: Config) {
   import scala.concurrent.duration
-  import scala.collection.JavaConverters._
+  import scala.jdk.CollectionConverters._
   //durationIn
   val addresses: Seq[String] = config.getStringList("addresses").asScala.toSeq
   val user: String = config.getString("user")
   val pass: String = config.getString("pass")
   val vhost: String = config.getString("vhost")
-  val amqpHeartbeat: FiniteDuration = DurationLong(config.getMilliseconds("heartbeat")).milli
-  val maxReconnectDelay: Duration = DurationLong(config.getMilliseconds("max-reconnect-delay")).milli
+  val amqpHeartbeat: FiniteDuration = DurationLong(config.getDuration("heartbeat", MILLISECONDS)).milli
+  val maxReconnectDelay: Duration = DurationLong(config.getDuration("max-reconnect-delay", MILLISECONDS)).milli
   val channelThreads: Int = config.getInt("channel-threads")
-  val interactionTimeout: Duration = DurationLong(config.getMilliseconds("interaction-timeout")).milli
-  val channelCreationTimeout: Duration = DurationLong(config.getMilliseconds("channel-creation-timeout")).milli
-  val channelReconnectTimeout: Duration = DurationLong(config.getMilliseconds("channel-reconnect-timeout")).milli
-  val publisherConfirmTimeout: FiniteDuration = DurationLong(config.getMilliseconds("publisher-confirm-timeout")).milli
+  val interactionTimeout: Duration = DurationLong(config.getDuration("interaction-timeout", MILLISECONDS)).milli
+  val channelCreationTimeout: Duration = DurationLong(config.getDuration("channel-creation-timeout", MILLISECONDS)).milli
+  val channelReconnectTimeout: Duration = DurationLong(config.getDuration("channel-reconnect-timeout", MILLISECONDS)).milli
+  val publisherConfirmTimeout: FiniteDuration = DurationLong(config.getDuration("publisher-confirm-timeout", MILLISECONDS)).milli
 }
 
