@@ -2,7 +2,7 @@ organization := "com.github.cessationoftime"
 
 name := "akka-amqp"
 
-version := "2.5-SNAPSHOT"
+version := "2.6-SNAPSHOT"
 
 scalaVersion := "2.13.1"
 
