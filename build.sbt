@@ -1,4 +1,4 @@
-organization := "com.github.cessationoftime"
+organization := "com.rememberthemilk"
 
 name := "akka-amqp"
 
