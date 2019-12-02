@@ -18,7 +18,7 @@ libraryDependencies ++= Seq(
 libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-testkit" % "2.6.0" % Test,
   "org.mockito" % "mockito-all" % "1.10.19" % Test,
-  "org.scalatest" %% "scalatest" % "3.0.8" % Test,
+  "org.scalatest" %% "scalatest" % "3.1.0" % Test,
   "com.github.fridujo" % "rabbitmq-mock" % "1.0.12" % Test
 )
 
