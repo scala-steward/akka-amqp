@@ -8,9 +8,10 @@ import scala.concurrent.{ Await }
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.Promise
 import akka.pattern.ask
-import org.scalatest.{ WordSpec, BeforeAndAfterAll, Tag, BeforeAndAfter, Matchers }
+import org.scalatest.{ BeforeAndAfterAll, Tag, BeforeAndAfter }
+import org.scalatest.wordspec.AnyWordSpec
 
-class ValidConnectionSpec extends WordSpec with BeforeAndAfterAll {
+class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
   abstract class AkkaContext
     extends AkkaSpec(AmqpConfig.Valid.config)
     with AmqpTest
