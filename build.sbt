@@ -12,11 +12,11 @@ resolvers ++= Seq(
 
 libraryDependencies ++= Seq(
   "com.rabbitmq" % "amqp-client" % "5.7.3",
-  "com.typesafe.akka" %% "akka-actor" % "2.6.0"
+  "com.typesafe.akka" %% "akka-actor" % "2.6.1"
 )
 
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-testkit" % "2.6.0" % Test,
+  "com.typesafe.akka" %% "akka-testkit" % "2.6.1" % Test,
   "org.mockito" % "mockito-all" % "1.10.19" % Test,
   "org.scalatest" %% "scalatest" % "3.1.0" % Test,
   "com.github.fridujo" % "rabbitmq-mock" % "1.0.12" % Test
