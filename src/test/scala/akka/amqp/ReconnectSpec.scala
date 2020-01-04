@@ -4,7 +4,7 @@ import akka.testkit.AkkaSpec
 
 class ReconnectSpec extends AkkaSpec {
 
-  "ReonnectionTimeoutGenerator" should {
+  "ReconnectionTimeoutGenerator" should {
 
     val timeoutGenerator = new ReconnectTimeoutGenerator
 

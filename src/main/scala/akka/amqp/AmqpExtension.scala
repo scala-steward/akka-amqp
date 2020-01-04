@@ -7,7 +7,6 @@ import akka.actor.ExtensionId
 import akka.actor.ExtendedActorSystem
 import akka.actor.ActorSystem
 import scala.concurrent.Future
-import reflect.ClassTag
 import akka.pattern.ask
 import scala.concurrent.duration._
 object AmqpExtension extends ExtensionId[AmqpExtensionImpl] with ExtensionIdProvider {
@@ -22,25 +21,7 @@ class AmqpExtensionImpl(implicit val _system: ActorSystem) extends Extension {
 
   val connectionActor = _system.actorOf(Props(new ConnectionActor(new ConnectionFactory, settings)), "amqp-connection")
 
-  def createChannel = {
-    implicit val to = akka.util.Timeout(5.seconds)
-    (connectionActor ? CreateChannel()).mapTo[ActorRef]
-  }
-
-  //private implicit val timeout = akka.util.Timeout(settings.interactionTimeout)
-
-  def withTempChannel[T: ClassTag](callback: RabbitChannel => T): Future[T] = {
-    ???
-    //    withConnection { conn =>
-    //      val ch = conn.createChannel()
-    //      try {
-    //        callback(ch)
-    //      } finally {
-    //        if (ch.isOpen) { ch.close() }
-    //      }
-    //    }
-  }
-
+  def createChannel: Future[ActorRef] = ask(connectionActor, CreateChannel())(5.seconds).mapTo[ActorRef]
 }
 
 class AmqpSettings(config: Config) {

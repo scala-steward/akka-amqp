@@ -1,30 +1,29 @@
 package akka.amqp
 
-import org.mockito.stubbing.Answer
-import org.scalatestplus.mockito.MockitoSugar
+import akka.actor._
+import akka.pattern.ask
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.concurrent.Future
+import org.mockito.stubbing.Answer
+import org.scalatestplus.mockito.MockitoSugar
 import reflect.ClassTag
+import scala.concurrent.Await
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 trait AmqpTest {
-  import akka.actor._
-  import akka.pattern.ask
   implicit val to = akka.util.Timeout(5.seconds)
   implicit def system: ActorSystem
   def connectionActor: ActorRef
+
   def rabbitConnectionAwait =
     Await.result((connectionActor ? WithConnection(x => x)).mapTo[RabbitConnection], 5.seconds)
+
   def withConnectionAwait[T: ClassTag](callback: RabbitConnection => T)(duration: Duration) =
     Await.result(withConnection(callback), duration)
 
-  def withConnection[T: ClassTag](callback: RabbitConnection => T): Future[T] = {
-
+  def withConnection[T: ClassTag](callback: RabbitConnection => T): Future[T] =
     (connectionActor ? WithConnection(callback)).mapTo[T]
-  }
-
 }
 
 trait AmqpMock extends MockitoSugar {
@@ -46,7 +45,6 @@ trait AmqpMock extends MockitoSugar {
 
     answer
   }
-
 }
 
 class MyAnswer(invoke: InvocationOnMock => Unit) extends Answer[Unit] {

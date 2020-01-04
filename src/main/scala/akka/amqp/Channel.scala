@@ -129,7 +129,6 @@ object ChannelActor {
         def stash(): Unit      = {}
         def unstashAll(): Unit = {}
       })
-
 }
 
 case class NewlyDeclared(declared: AnyRef)
