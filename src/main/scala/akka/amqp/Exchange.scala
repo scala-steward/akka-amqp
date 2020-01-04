@@ -121,11 +121,11 @@ case class ExchangeToExchangeBinding private[amqp] (
     arguments: Option[Map[String, AnyRef]] = None
 ) {
 
-  def bind(channel: RabbitChannel): Unit = {
+  def bind(channel: RabbitChannel): RabbitExchange.BindOk = {
     channel.exchangeBind(destination.name, source.name, routingKey, arguments.map(_.asJava).getOrElse(null))
   }
 
-  def unbind(channel: RabbitChannel): Unit = {
+  def unbind(channel: RabbitChannel): RabbitExchange.UnbindOk = {
     channel.exchangeUnbind(destination.name, source.name, routingKey, arguments.map(_.asJava).getOrElse(null))
   }
 }

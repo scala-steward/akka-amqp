@@ -31,10 +31,14 @@ resolvers ++= Seq(
 )
 
 scalacOptions ++= Seq(
+  "-Xfatal-warnings",
+  "-Xlint",
   "-Ywarn-dead-code",
+  "-Ywarn-unused",
+  "-Ywarn-value-discard",
   "-deprecation",
+  "-feature",
   "-language:implicitConversions",
-  "-language:postfixOps",
   "-opt:l:inline",
   "-opt:l:method",
   "-unchecked"

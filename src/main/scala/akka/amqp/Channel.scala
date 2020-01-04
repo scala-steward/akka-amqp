@@ -1,19 +1,9 @@
 package akka.amqp
 
-import collection.mutable.ArrayBuffer
-import akka.actor.FSM.SubscribeTransitionCallBack
 import java.io.IOException
 import util.control.Exception
 import akka.actor._
-import akka.util.Timeout
-import akka.event.Logging
-import akka.pattern.ask
 import akka.serialization.SerializationExtension
-import akka.amqp.Message._
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
-import scala.concurrent.{ExecutionContext, Promise}
-import reflect.ClassTag
 import akka.serialization.SerializationExtension
 import akka.actor.Props
 import akka.actor.Stash
@@ -200,16 +190,16 @@ abstract private[amqp] class ChannelActor(protected val settings: AmqpSettings)
     //          log.error(ioe, "Error while requesting channel from connection {}", connection)
     //          setTimer("request-channel", RequestChannel(connection), settings.channelReconnectTimeout, true)
     //      }
-    case Event(NewChannel(channel), _ %: callbacks %: mode) =>
+    case Event(NewChannel(channel), _ %: callbacks %: _) =>
       cancelTimer("request-channel")
       log.debug("Received channel {}", channel)
       channel.addShutdownListener(this)
       callbacks.foreach(_.apply(channel))
       goto(Available).using(stateData.toAvailable(channel))
-    case Event(WithChannel(callback), _) =>
+    case Event(WithChannel(_), _) =>
       stash()
       stay()
-    case Event(OnlyIfAvailable(callback), _) =>
+    case Event(OnlyIfAvailable(_), _) =>
       stay()
 
     case Event(_: DeleteExchange, _) | Event(_: DeleteQueue, _) | Event(_: Declare, _) =>
@@ -249,7 +239,7 @@ abstract private[amqp] class ChannelActor(protected val settings: AmqpSettings)
         stay()
       case Event(ExecuteOnNewChannel(callback), _) =>
         stay().using(stateData.addCallback(callback))
-      case Event(cause: ShutdownSignalException, _ %: callbacks %: mode) =>
+      case Event(cause: ShutdownSignalException, _ %: _ %: _) =>
         if (cause.isHardError) { // connection error, await ConnectionDisconnected()
           stay()
         } else { // channel error

@@ -3,24 +3,20 @@ package akka.amqp
 import org.mockito.stubbing.Answer
 import org.scalatestplus.mockito.MockitoSugar
 import org.mockito.Mockito._
-import org.mockito.Matchers._
 import org.mockito.invocation.InvocationOnMock
-import akka.testkit.TestKit
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.concurrent.Future
 import reflect.ClassTag
-import akka.testkit.TestFSMRef
 
 trait AmqpTest {
   import akka.actor._
   import akka.pattern.ask
-  import scala.concurrent.ExecutionContext.Implicits.global
-  implicit val to = akka.util.Timeout(5 seconds)
+  implicit val to = akka.util.Timeout(5.seconds)
   implicit def system: ActorSystem
   def connectionActor: ActorRef
   def rabbitConnectionAwait =
-    Await.result((connectionActor ? WithConnection(x => x)).mapTo[RabbitConnection], 5 seconds)
+    Await.result((connectionActor ? WithConnection(x => x)).mapTo[RabbitConnection], 5.seconds)
   def withConnectionAwait[T: ClassTag](callback: RabbitConnection => T)(duration: Duration) =
     Await.result(withConnection(callback), duration)
 

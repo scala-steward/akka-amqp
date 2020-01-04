@@ -1,14 +1,13 @@
 package akka.amqp
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition, UnsubscribeTransitionCallBack}
-import akka.testkit.{AkkaSpec, TestFSMRef, TestKit}
-import akka.actor.{ActorSystem, PoisonPill}
+import akka.testkit.{AkkaSpec, TestFSMRef}
+import akka.actor.PoisonPill
 import com.github.fridujo.rabbitmq.mock.MockConnectionFactory
 import scala.concurrent.duration._
 import scala.concurrent.{Await}
-import com.typesafe.config.ConfigFactory
 import scala.concurrent.Promise
 import akka.pattern.ask
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.wordspec.AnyWordSpec
 
 class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
@@ -37,7 +36,7 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
     "reconnect on ShutdownSignalException" in withAkkaContext { context =>
       import context._
       try {
-        within(5 second) {
+        within(5.second) {
           connectionActor ! Connect
           connectionActor ! SubscribeTransitionCallBack(testActor)
           expectMsg(CurrentState(connectionActor, Connected))
@@ -75,13 +74,13 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
       conn.isOpen() shouldBe true
       system.terminate
 
-      awaitCond(conn.isOpen() == false, 5 seconds, 100 milli)
+      awaitCond(conn.isOpen() == false, 5.seconds, 100.milli)
     }
     "propagate state transition to child Actors" in withAkkaContext { context =>
       import context._
       import ChannelActor.{Available, Unavailable}
 
-      val channel = Await.result((connectionActor ? CreateChannel(false)).mapTo[akka.actor.ActorRef], 1 second)
+      val channel = Await.result((connectionActor ? CreateChannel(false)).mapTo[akka.actor.ActorRef], 1.second)
       channel ! SubscribeTransitionCallBack(testActor)
       expectMsg(CurrentState(channel, Unavailable))
 
@@ -108,7 +107,7 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
         expectMsg(CurrentState(connectionActor, Connected))
         val portFuture = withConnection(_.getPort)
         val promise    = Promise.successful(5672).future
-        Await.ready(portFuture, 5 seconds).value shouldBe Await.ready(promise, 5 seconds).value
+        Await.ready(portFuture, 5.seconds).value shouldBe Await.ready(promise, 5.seconds).value
       }
     }
   }
@@ -120,7 +119,7 @@ class NoConnectionSpec extends AkkaSpec(AmqpConfig.Invalid.config) {
       val connectionActor = TestFSMRef(new ConnectionActor(new ConnectionFactory, AmqpConfig.Invalid.settings))
       try {
         connectionActor ! Connect
-        within(2500 milli) {
+        within(2500.milli) {
           connectionActor ! SubscribeTransitionCallBack(testActor)
           expectMsg(CurrentState(connectionActor, Disconnected))
         }

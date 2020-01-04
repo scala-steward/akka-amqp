@@ -43,19 +43,19 @@ object Coroner {
     val startedLatch  = new CountDownLatch(1)
     val finishedLatch = new CountDownLatch(1)
 
-    def waitForStart(): Unit = {
+    def waitForStart(): Boolean =
       startedLatch.await(startAndStopDuration.length, startAndStopDuration.unit)
-    }
 
     def started(): Unit = startedLatch.countDown()
 
     def finished(): Unit = finishedLatch.countDown()
 
-    def expired(): Unit = cancelPromise.trySuccess(false)
+    def expired(): Boolean = cancelPromise.trySuccess(false)
 
     override def cancel(): Unit = {
       cancelPromise.trySuccess(true)
       finishedLatch.await(startAndStopDuration.length, startAndStopDuration.unit)
+      ()
     }
 
     override def ready(atMost: Duration)(implicit permit: CanAwait): this.type = {

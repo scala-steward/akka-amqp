@@ -1,6 +1,5 @@
 package akka.amqp
 import akka.pattern.ask
-import scala.language.implicitConversions
 import akka.actor._
 import com.typesafe.config.Config
 import akka.actor.ExtensionIdProvider
@@ -8,7 +7,6 @@ import akka.actor.ExtensionId
 import akka.actor.ExtendedActorSystem
 import akka.actor.ActorSystem
 import scala.concurrent.Future
-import scala.concurrent.Await
 import reflect.ClassTag
 import akka.pattern.ask
 import scala.concurrent.duration._
@@ -46,7 +44,6 @@ class AmqpExtensionImpl(implicit val _system: ActorSystem) extends Extension {
 }
 
 class AmqpSettings(config: Config) {
-  import scala.concurrent.duration
   import scala.jdk.CollectionConverters._
   //durationIn
   val addresses: Seq[String]        = config.getStringList("addresses").asScala.toSeq

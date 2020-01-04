@@ -1,18 +1,8 @@
 package akka.amqp
 
 import akka.actor.ActorRef
-import Queue._
 
-import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.{CountDownLatch, TimeUnit}
-import util.control.Exception
-
-import java.io.IOException
 import akka.actor.ActorRef
-import akka.event.Logging
-import scala.concurrent.Future
-import scala.concurrent.Promise
-import akka.actor.ActorSystem
 import ChannelActor._
 //trait CanStop {
 //  def stop : Unit
@@ -85,8 +75,8 @@ trait ChannelConsumer { channelActor: ChannelActor =>
   ): ConsumerMode = {
 
     //use mutable values to track what queues and exchanges have already been declared
-    var uniqueDeclaredQueues                = List.empty[DeclaredQueue]
-    var uniqueDeclaredExchanges             = List.empty[DeclaredExchange]
+    var uniqueDeclaredQueues = List.empty[DeclaredQueue]
+    List.empty[DeclaredExchange]
     var defaultQueue: Option[DeclaredQueue] = None
     bindings.foreach { binding =>
       val declaredExchange = binding.exchange match {
@@ -169,7 +159,7 @@ trait ChannelConsumer { channelActor: ChannelActor =>
   }
 
   def consumerUnhandled: StateFunction = {
-    case Event(Consumer(listener, autoAck, bindings), data) =>
+    case Event(Consumer(listener, autoAck, bindings), _) =>
       log.debug("Switching to Consumer Mode, Not Available")
       //switch modes and save the message contents so that when we transition back to Available we know how to wire things up
       stay().using(stateData.toMode(ConsumerMode(listener, autoAck, bindings, Seq.empty)))
@@ -186,7 +176,7 @@ trait ChannelConsumer { channelActor: ChannelActor =>
   }
 
   def consumerTermination: PartialFunction[StopEvent, Unit] = {
-    case StopEvent(_, state, ChannelData(Some(channel), callbacks, cm: ConsumerMode)) =>
+    case StopEvent(_, _, ChannelData(Some(channel), _, cm: ConsumerMode)) =>
       log.debug("\n\n\nConsumer terminating\n\n\n")
       cm.cancelTags(channel)
       terminateWhenActive(channel)

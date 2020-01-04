@@ -1,15 +1,9 @@
 package akka.amqp
-import scala.concurrent.Future
-import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition}
-import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration._
 import java.lang.Thread
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory}
 import akka.actor._
-import akka.util.Timeout
-import akka.pattern.ask
-import java.io.IOException
 import util.control.Exception
 
 sealed trait ConnectionState
@@ -113,7 +107,7 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
       cancelTimer("reconnect")
       log.info("Already disconnected")
       stay()
-    case Event(cause: ShutdownSignalException, _) =>
+    case Event(_: ShutdownSignalException, _) =>
       stay()
   }
 
@@ -174,7 +168,7 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
   initialize
 
   onTermination {
-    case StopEvent(reason, state, connectionOption) =>
+    case StopEvent(_, _, _) =>
       stateData.foreach { c =>
         Exception.ignoring(classOf[AlreadyClosedException]) {
           c.close()

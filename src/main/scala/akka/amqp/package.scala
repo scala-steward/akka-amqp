@@ -1,16 +1,18 @@
 package akka
 
-import java.io.IOException
-
 package object amqp {
 
   object RabbitQueue extends com.rabbitmq.client.AMQP.Queue {
-    type DeclareOk = com.rabbitmq.client.AMQP.Queue.DeclareOk
     type BindOk    = com.rabbitmq.client.AMQP.Queue.BindOk
+    type DeclareOk = com.rabbitmq.client.AMQP.Queue.DeclareOk
+    type DeleteOk  = com.rabbitmq.client.AMQP.Queue.DeleteOk
+    type PurgeOk   = com.rabbitmq.client.AMQP.Queue.PurgeOk
   }
 
   object RabbitExchange extends com.rabbitmq.client.AMQP.Exchange {
+    type BindOk    = com.rabbitmq.client.AMQP.Exchange.BindOk
     type DeclareOk = com.rabbitmq.client.AMQP.Exchange.DeclareOk
+    type UnbindOk  = com.rabbitmq.client.AMQP.Exchange.UnbindOk
   }
 
   type ReturnListener          = com.rabbitmq.client.ReturnListener
@@ -24,12 +26,4 @@ package object amqp {
   type ConnectionFactory       = com.rabbitmq.client.ConnectionFactory
   type RabbitConnection        = com.rabbitmq.client.Connection
   type RabbitChannel           = com.rabbitmq.client.Channel
-
-  object RabbitAddress {
-    def parseAddress = com.rabbitmq.client.Address.parseAddress _
-  }
-  class RabbitAddress(host: String, port: Int) extends com.rabbitmq.client.Address(host, port) {
-    def this(host: String) = this(host, -1)
-  }
-
 }

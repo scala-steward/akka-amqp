@@ -6,7 +6,6 @@ package akka.testkit
 
 import org.scalactic.{CanEqual, TypeCheckedTripleEquals}
 
-import language.postfixOps
 import org.scalatest.BeforeAndAfterAll
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
@@ -101,10 +100,10 @@ abstract class AkkaSpec(_system: ActorSystem)
 
   protected def afterTermination(): Unit = {}
 
-  def spawn(dispatcherId: String = Dispatchers.DefaultDispatcherId)(body: => Unit): Unit =
+  def spawn(dispatcherId: String = Dispatchers.DefaultDispatcherId)(body: => Unit): Future[Unit] =
     Future(body)(system.dispatchers.lookup(dispatcherId))
 
-  override def expectedTestDuration: FiniteDuration = 60 seconds
+  override def expectedTestDuration: FiniteDuration = 60.seconds
 
   def muteDeadLetters(messageClasses: Class[_]*)(sys: ActorSystem = system): Unit =
     if (!sys.log.isDebugEnabled) {

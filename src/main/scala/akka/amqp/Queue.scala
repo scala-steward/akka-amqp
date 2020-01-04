@@ -1,7 +1,6 @@
 package akka.amqp
 
 import scala.jdk.CollectionConverters._
-import java.io.IOException
 import akka.actor.ActorSystem
 
 object Queue {
@@ -139,13 +138,10 @@ case class DeclaredQueue(peer: RabbitQueue.DeclareOk, params: Option[QueueParams
   def messageCount  = peer.getMessageCount()
   def consumerCount = peer.getConsumerCount()
 
-  def purge(implicit channel: RabbitChannel): Unit = {
-    channel.queuePurge(name)
-  }
+  def purge(implicit channel: RabbitChannel): RabbitQueue.PurgeOk = channel.queuePurge(name)
 
-  def delete(ifUnused: Boolean, ifEmpty: Boolean)(implicit channel: RabbitChannel): Unit = {
+  def delete(ifUnused: Boolean, ifEmpty: Boolean)(implicit channel: RabbitChannel): RabbitQueue.DeleteOk =
     channel.queueDelete(name, ifUnused, ifEmpty)
-  }
 
   /**
    * DSL to bind this Queue to an Exchange

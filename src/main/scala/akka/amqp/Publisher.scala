@@ -1,17 +1,11 @@
 package akka.amqp
 
-import scala.concurrent.{ExecutionContext, Promise}
 import java.util.{Collections, TreeSet}
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit, TimeoutException}
-import scala.concurrent.duration._
-import akka.util.Timeout
-import scala.concurrent.{Await, Future}
-import akka.event.Logging
-import akka.serialization.SerializationExtension
-import akka.pattern.ask
+import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
 import akka.actor._
 import ChannelActor._
+
 case class Message(
     payload: AnyRef,
     routingKey: String,
@@ -66,33 +60,31 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
   }
 
   when(Unavailable) {
-    case Event(mess: PublishToExchange, _) =>
+    case Event(_: PublishToExchange, _) =>
       stash()
       stay()
   }
 
   def publisherUnhandled: StateFunction = {
-    case Event(p: Publisher, data) =>
+    case Event(p: Publisher, _) =>
       log.debug("Switching to @ Publisher Mode, Not Available")
       stay().using(stateData.toMode(p))
-    case Event(cp: ConfirmingPublisher, data) =>
+    case Event(cp: ConfirmingPublisher, _) =>
       log.debug("Switching to @ ConfirmingPublisher Mode, Not Available")
       stay().using(stateData.toMode(cp))
   }
 
   when(Available) {
-    case Event(PublishToExchange(message, exchangeName, true), Some(channel) %: _ %: ConfirmingPublisher(listener)) =>
+    case Event(PublishToExchange(message, exchangeName, true), Some(channel) %: _ %: ConfirmingPublisher(_)) =>
       //      val confirmPromise = Promise[Confirm]
       //      sender ! confirmPromise
       val returnToSender = sender
 
       import message._
       log.debug("Publishing confirmed on '{}': {}", exchangeName, message)
-      val s                = serialization.findSerializerFor(payload)
-      val serialized       = s.toBinary(payload)
-      val seqNo            = channel.getNextPublishSeqNo
-      implicit val timeout = Timeout(settings.publisherConfirmTimeout)
-      import ExecutionContext.Implicits.global
+      val s          = serialization.findSerializerFor(payload)
+      val serialized = s.toBinary(payload)
+      val seqNo      = channel.getNextPublishSeqNo
       try {
         lock.synchronized {
           unconfirmedSet.add(seqNo)
@@ -100,7 +92,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
         }
         channel.basicPublish(exchangeName, routingKey, mandatory, immediate, properties.getOrElse(null), serialized)
       } catch {
-        case ex: Throwable =>
+        case _: Throwable =>
           unconfirmedSet.remove(seqNo)
           confirmHandles.remove(seqNo, returnToSender)
       }
@@ -129,11 +121,11 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
     //really would prefer to just "Let it crash" when a channel disconnects,
     //instead of reloading the state for this actor...not sure how that would work with the autoreconnect functionality though
     case Unavailable -> Available if nextStateData.isPublisher =>
-      val Some(channel) %: _ %: Publisher(listener) = nextStateData
+      val Some(_) %: _ %: Publisher(listener) = nextStateData
       context.self ! Publisher(listener) //switch to modes again before unstashing messages!
       unstashAll()
     case Unavailable -> Available if nextStateData.isConfirmingPublisher =>
-      val Some(channel) %: _ %: ConfirmingPublisher(listener) = nextStateData
+      val Some(_) %: _ %: ConfirmingPublisher(listener) = nextStateData
       context.self ! ConfirmingPublisher(listener) //switch to modes again before unstashing messages!
       unstashAll()
   }
