@@ -4,7 +4,7 @@ import scala.jdk.CollectionConverters._
 import akka.actor.ActorSystem
 
 object Exchange {
-  def nameless = NamelessExchange
+  def nameless            = NamelessExchange
   def apply(name: String) = new ExchangeDeclarationMode(name)
   def named(name: String) = new ExchangeDeclarationMode(name)
 }
@@ -12,6 +12,7 @@ object Exchange {
 sealed trait Exchange {
   val name: String
   val params: Option[ExchangeParams]
+
   /**
    * start the binding process to bind this Queue to an Exchange
    */
@@ -21,19 +22,24 @@ sealed trait Exchange {
   }
 }
 
-case class ExchangeParams private[amqp] (exchangeType: String,
-                                         durable: Boolean = false,
-                                         autoDelete: Boolean = false,
-                                         internal: Boolean = false,
-                                         arguments: Option[Map[String, AnyRef]] = None)
+case class ExchangeParams private[amqp] (
+    exchangeType: String,
+    durable: Boolean = false,
+    autoDelete: Boolean = false,
+    internal: Boolean = false,
+    arguments: Option[Map[String, AnyRef]] = None
+)
 
 class ExchangeDeclarationMode private[amqp] (val name: String) {
-  def active(exchangeType: String,
-             durable: Boolean = false,
-             autoDelete: Boolean = false,
-             internal: Boolean = false,
-             arguments: Option[Map[String, AnyRef]] = None) = ActiveUndeclaredExchange(name, exchangeType, durable, autoDelete, internal, arguments)
+  def active(
+      exchangeType: String,
+      durable: Boolean = false,
+      autoDelete: Boolean = false,
+      internal: Boolean = false,
+      arguments: Option[Map[String, AnyRef]] = None
+  )           = ActiveUndeclaredExchange(name, exchangeType, durable, autoDelete, internal, arguments)
   def passive = PassiveUndeclaredExchange(name)
+
   /**
    * create an exchange that will not declare itself with the AMQP server if you call the declare method.
    */
@@ -50,8 +56,8 @@ case class DontDeclareUndeclaredExchange private[amqp] (val name: String) extend
   val params: Option[ExchangeParams] = None
   def declare(implicit channel: RabbitChannel, system: ActorSystem): NamedExchange = {
     val ok = new Object with RabbitExchange.DeclareOk {
-      def protocolClassId() = 40
-      def protocolMethodId() = 11
+      def protocolClassId()    = 40
+      def protocolMethodId()   = 11
       def protocolMethodName() = "exchange.declare-ok"
     }
 
@@ -67,18 +73,28 @@ case class PassiveUndeclaredExchange private[amqp] (val name: String) extends Un
     de
   }
 }
-case class ActiveUndeclaredExchange private[amqp] (val name: String, exchangeType: String,
-                                                   durable: Boolean = false,
-                                                   autoDelete: Boolean = false,
-                                                   internal: Boolean = false,
-                                                   arguments: Option[Map[String, AnyRef]] = None) extends UndeclaredExchange {
+case class ActiveUndeclaredExchange private[amqp] (
+    val name: String,
+    exchangeType: String,
+    durable: Boolean = false,
+    autoDelete: Boolean = false,
+    internal: Boolean = false,
+    arguments: Option[Map[String, AnyRef]] = None
+) extends UndeclaredExchange {
 
   lazy val params: Option[ExchangeParams] = Some(ExchangeParams(exchangeType, durable, autoDelete, internal, arguments))
 
   def declare(implicit channel: RabbitChannel, system: ActorSystem) = {
-    val declareOk = channel.exchangeDeclare(name, exchangeType, durable, autoDelete, internal, arguments.map(_.asJava).getOrElse(null))
+    val declareOk = channel.exchangeDeclare(
+      name,
+      exchangeType,
+      durable,
+      autoDelete,
+      internal,
+      arguments.map(_.asJava).getOrElse(null)
+    )
     val params = ExchangeParams(exchangeType, durable, autoDelete, internal, arguments)
-    val de = NamedExchange(name, declareOk, Some(params), this)
+    val de     = NamedExchange(name, declareOk, Some(params), this)
     system.eventStream.publish(NewlyDeclared(de))
     de
   }
@@ -87,18 +103,23 @@ case class ActiveUndeclaredExchange private[amqp] (val name: String, exchangeTyp
 sealed trait DeclaredExchange extends Exchange
 
 case object NamelessExchange extends DeclaredExchange {
-  val name = ""
+  val name   = ""
   val params = None
 }
 
-case class NamedExchange private[amqp] (val name: String, val peer: RabbitExchange.DeclareOk, val params: Option[ExchangeParams] = None, val undeclared: UndeclaredExchange) extends DeclaredExchange {
+case class NamedExchange private[amqp] (
+    val name: String,
+    val peer: RabbitExchange.DeclareOk,
+    val params: Option[ExchangeParams] = None,
+    val undeclared: UndeclaredExchange
+) extends DeclaredExchange {}
 
-}
-
-case class ExchangeToExchangeBinding private[amqp] (source: Exchange,
-                                                    destination: Exchange,
-                                                    routingKey: String,
-                                                    arguments: Option[Map[String, AnyRef]] = None) {
+case class ExchangeToExchangeBinding private[amqp] (
+    source: Exchange,
+    destination: Exchange,
+    routingKey: String,
+    arguments: Option[Map[String, AnyRef]] = None
+) {
 
   def bind(channel: RabbitChannel): Unit = {
     channel.exchangeBind(destination.name, source.name, routingKey, arguments.map(_.asJava).getOrElse(null))

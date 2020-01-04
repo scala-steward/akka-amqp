@@ -4,7 +4,7 @@ import akka.actor.ActorRef
 import Queue._
 
 import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.{ CountDownLatch, TimeUnit }
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import util.control.Exception
 
 import java.io.IOException
@@ -16,21 +16,25 @@ import akka.actor.ActorSystem
 import ChannelActor._
 //trait CanStop {
 //  def stop : Unit
-//} 
+//}
 //
-case class ReturnedMessage(replyCode: Int,
-                           replyText: String,
-                           exchange: String,
-                           routingKey: String,
-                           properties: BasicProperties,
-                           body: Array[Byte])
+case class ReturnedMessage(
+    replyCode: Int,
+    replyText: String,
+    exchange: String,
+    routingKey: String,
+    properties: BasicProperties,
+    body: Array[Byte]
+)
 
-case class Delivery(payload: Array[Byte],
-                    routingKey: String,
-                    deliveryTag: Long,
-                    isRedeliver: Boolean,
-                    properties: BasicProperties,
-                    channelActor: ActorRef) {
+case class Delivery(
+    payload: Array[Byte],
+    routingKey: String,
+    deliveryTag: Long,
+    isRedeliver: Boolean,
+    properties: BasicProperties,
+    channelActor: ActorRef
+) {
 
   def acknowledge(deliveryTag: Long, multiple: Boolean = false): Unit = {
     if (!channelActor.isTerminated) channelActor ! OnlyIfAvailable(_.basicAck(deliveryTag, multiple))
@@ -43,7 +47,7 @@ case class Delivery(payload: Array[Byte],
 
 //object DurableConsumer {
 //  import scala.concurrent.ExecutionContext.Implicits.global
-//  
+//
 //  def apply(channel: RabbitChannel)(queue: DeclaredQueue,
 //                      deliveryHandler: ActorRef,
 //                      autoAck: Boolean,
@@ -51,7 +55,7 @@ case class Delivery(payload: Array[Byte],
 //    implicit val c = channel
 //   new DurableConsumer(queue,deliveryHandler,autoAck, queueBindings : _*)
 //  }
-//  
+//
 //  def apply(queue: DeclaredQueue,
 //                      deliveryHandler: ActorRef,
 //                      autoAck: Boolean,
@@ -59,10 +63,10 @@ case class Delivery(payload: Array[Byte],
 //
 //   durableChannel.withChannel{ implicit c =>
 //      new DurableConsumer(queue,deliveryHandler,autoAck, queueBindings : _*)
-//      
+//
 //      }
-//  }        
-//    
+//  }
+//
 //}
 case object StopConsuming
 trait ChannelConsumer { channelActor: ChannelActor =>
@@ -73,14 +77,18 @@ trait ChannelConsumer { channelActor: ChannelActor =>
    * track the Queue and Exchange if they were declared, as well as the tag and QueueBinding.
    *
    */
-  def setupConsumer(channel: RabbitChannel, listener: ActorRef, autoAck: Boolean, bindings: Seq[QueueBinding]): ConsumerMode = {
+  def setupConsumer(
+      channel: RabbitChannel,
+      listener: ActorRef,
+      autoAck: Boolean,
+      bindings: Seq[QueueBinding]
+  ): ConsumerMode = {
 
     //use mutable values to track what queues and exchanges have already been declared
-    var uniqueDeclaredQueues = List.empty[DeclaredQueue]
-    var uniqueDeclaredExchanges = List.empty[DeclaredExchange]
+    var uniqueDeclaredQueues                = List.empty[DeclaredQueue]
+    var uniqueDeclaredExchanges             = List.empty[DeclaredExchange]
     var defaultQueue: Option[DeclaredQueue] = None
-    bindings foreach { binding =>
-
+    bindings.foreach { binding =>
       val declaredExchange = binding.exchange match {
         case e: UndeclaredExchange => e.declare(channel, context.system)
         case e: DeclaredExchange   => e
@@ -118,20 +126,35 @@ trait ChannelConsumer { channelActor: ChannelActor =>
         //declare queueBinding
         import scala.jdk.CollectionConverters._
         //require(binding.routingKey != null, "the routingKey must not be null to bind " + declaredExchange.name + " >> " + declaredQueue.name)
-        val ok = channel.queueBind(declaredQueue.name, declaredExchange.name, binding.routingKey, binding.getArgs.map(_.toMap.asJava).getOrElse(null))
-        context.system.eventStream.publish(NewlyDeclared(DeclaredQueueBinding(Some(ok), declaredQueue, declaredExchange, binding)))
+        val ok = channel.queueBind(
+          declaredQueue.name,
+          declaredExchange.name,
+          binding.routingKey,
+          binding.getArgs.map(_.toMap.asJava).getOrElse(null)
+        )
+        context.system.eventStream
+          .publish(NewlyDeclared(DeclaredQueueBinding(Some(ok), declaredQueue, declaredExchange, binding)))
       }
     }
 
     val distinctlyNamedQueues = defaultQueue.toList ::: uniqueDeclaredQueues
 
-    val tags = distinctlyNamedQueues map { queue =>
-      val tag = channel.basicConsume(queue.name, autoAck, new DefaultConsumer(channel) {
-        override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]): Unit = {
-          import envelope._
-          listener ! Delivery(body, getRoutingKey, getDeliveryTag, isRedeliver, properties, context.self)
+    val tags = distinctlyNamedQueues.map { queue =>
+      val tag = channel.basicConsume(
+        queue.name,
+        autoAck,
+        new DefaultConsumer(channel) {
+          override def handleDelivery(
+              consumerTag: String,
+              envelope: Envelope,
+              properties: BasicProperties,
+              body: Array[Byte]
+          ): Unit = {
+            import envelope._
+            listener ! Delivery(body, getRoutingKey, getDeliveryTag, isRedeliver, properties, context.self)
+          }
         }
-      })
+      )
       tag
     }
     ConsumerMode(listener, autoAck, bindings, tags)
@@ -140,16 +163,16 @@ trait ChannelConsumer { channelActor: ChannelActor =>
   when(Available) {
     case Event(Consumer(listener, autoAck, bindings), Some(channel) %: _ %: _) =>
       log.debug("Switching to Consumer Mode, Available")
-      stay() using stateData.toMode(setupConsumer(channel, listener, autoAck, bindings))
+      stay().using(stateData.toMode(setupConsumer(channel, listener, autoAck, bindings)))
     case Event(StopConsuming, ChannelData(Some(channel), _, cm: ConsumerMode)) =>
-      stay() using stateData.toMode(cm cancelTags channel);
+      stay().using(stateData.toMode(cm.cancelTags(channel)));
   }
 
   def consumerUnhandled: StateFunction = {
     case Event(Consumer(listener, autoAck, bindings), data) =>
       log.debug("Switching to Consumer Mode, Not Available")
       //switch modes and save the message contents so that when we transition back to Available we know how to wire things up
-      stay() using stateData.toMode(ConsumerMode(listener, autoAck, bindings, Seq.empty))
+      stay().using(stateData.toMode(ConsumerMode(listener, autoAck, bindings, Seq.empty)))
 
   }
 

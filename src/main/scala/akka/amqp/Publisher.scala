@@ -1,22 +1,24 @@
 package akka.amqp
 
-import scala.concurrent.{ ExecutionContext, Promise }
-import java.util.{ Collections, TreeSet }
-import java.util.concurrent.{ TimeoutException, TimeUnit, CountDownLatch, ConcurrentHashMap }
+import scala.concurrent.{ExecutionContext, Promise}
+import java.util.{Collections, TreeSet}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit, TimeoutException}
 import scala.concurrent.duration._
 import akka.util.Timeout
-import scala.concurrent.{ Await, Future }
+import scala.concurrent.{Await, Future}
 import akka.event.Logging
 import akka.serialization.SerializationExtension
 import akka.pattern.ask
 import scala.jdk.CollectionConverters._
 import akka.actor._
 import ChannelActor._
-case class Message(payload: AnyRef,
-                   routingKey: String,
-                   mandatory: Boolean = false,
-                   immediate: Boolean = false,
-                   properties: Option[BasicProperties] = None)
+case class Message(
+    payload: AnyRef,
+    routingKey: String,
+    mandatory: Boolean = false,
+    immediate: Boolean = false,
+    properties: Option[BasicProperties] = None
+)
 //sealed trait PublishMode
 //case object Immediate extends PublishMode
 //case object Confirm extends PublishMode
@@ -31,28 +33,35 @@ case class PublishToExchange(message: Message, exchangeName: String, confirm: Bo
 //case class AddReturnListener(returnListener: ActorRef)
 
 sealed trait Confirm
-case object Ack extends Confirm
+case object Ack  extends Confirm
 case object Nack extends Confirm
 
 trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
 
   def addReturnListener(channel: RabbitChannel, listener: ActorRef) = {
     channel.addReturnListener(new ReturnListener {
-      def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]): Unit = {
+      def handleReturn(
+          replyCode: Int,
+          replyText: String,
+          exchange: String,
+          routingKey: String,
+          properties: BasicProperties,
+          body: Array[Byte]
+      ): Unit = {
         listener ! ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body)
       }
     })
   }
 
   def setupPublisher(channel: RabbitChannel, listener: Option[ActorRef]) = {
-    listener foreach { listener =>
+    listener.foreach { listener =>
       addReturnListener(channel, listener)
     }
   }
 
   def setupConfirmingPublisher(channel: RabbitChannel, listener: Option[ActorRef]) = {
     channel.confirmSelect()
-    listener foreach { addReturnListener(channel, _) }
+    listener.foreach { addReturnListener(channel, _) }
     channel.addConfirmListener(this)
   }
 
@@ -65,10 +74,10 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
   def publisherUnhandled: StateFunction = {
     case Event(p: Publisher, data) =>
       log.debug("Switching to @ Publisher Mode, Not Available")
-      stay() using stateData.toMode(p)
+      stay().using(stateData.toMode(p))
     case Event(cp: ConfirmingPublisher, data) =>
       log.debug("Switching to @ ConfirmingPublisher Mode, Not Available")
-      stay() using stateData.toMode(cp)
+      stay().using(stateData.toMode(cp))
   }
 
   when(Available) {
@@ -79,9 +88,9 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
 
       import message._
       log.debug("Publishing confirmed on '{}': {}", exchangeName, message)
-      val s = serialization.findSerializerFor(payload)
-      val serialized = s.toBinary(payload)
-      val seqNo = channel.getNextPublishSeqNo
+      val s                = serialization.findSerializerFor(payload)
+      val serialized       = s.toBinary(payload)
+      val seqNo            = channel.getNextPublishSeqNo
       implicit val timeout = Timeout(settings.publisherConfirmTimeout)
       import ExecutionContext.Implicits.global
       try {
@@ -99,7 +108,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
     case Event(PublishToExchange(message, exchangeName, false), Some(channel) %: _ %: _) =>
       import message._
       log.debug("Publishing on '{}': {}", exchangeName, message)
-      val s = serialization.findSerializerFor(payload)
+      val s          = serialization.findSerializerFor(payload)
       val serialized = s.toBinary(payload)
       channel.basicPublish(exchangeName, routingKey, mandatory, immediate, properties.getOrElse(null), serialized)
       stay()
@@ -107,13 +116,13 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
     case Event(p @ Publisher(listener), Some(channel) %: _ %: _) =>
       log.debug("Switching to @ Publisher Mode, Available")
       setupPublisher(channel, listener)
-      stay() using stateData.toMode(p)
+      stay().using(stateData.toMode(p))
 
     case Event(cp @ ConfirmingPublisher(listener), Some(channel) %: _ %: _) =>
       log.debug("Switching to @ ConfirmingPublisher Mode, Available")
       setupConfirmingPublisher(channel, listener)
 
-      stay() using stateData.toMode(cp)
+      stay().using(stateData.toMode(cp))
   }
 
   onTransition {
@@ -129,7 +138,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
       unstashAll()
   }
 
-  lazy val lock: AnyRef = new Object();
+  lazy val lock: AnyRef           = new Object();
   private lazy val confirmHandles = new ConcurrentHashMap[Long, ActorRef]().asScala
   private lazy val unconfirmedSet = Collections.synchronizedSortedSet(new TreeSet[Long]()) //Synchronized set must be in sychronized block!
 
@@ -160,7 +169,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
     }
 
     def complete(seqNo: Long): Unit = {
-      confirmHandles.remove(seqNo) foreach {
+      confirmHandles.remove(seqNo).foreach {
         _ ! (if (ack) Ack else Nack)
       }
     }
@@ -207,33 +216,33 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
 //
 //}
 
-//trait CanBuildConfirmingPublisher extends CanBuildDurablePublisher { 
+//trait CanBuildConfirmingPublisher extends CanBuildDurablePublisher {
 //  durableChannel : DurableConnection#DurableChannel =>
 //
 //  val persistentChannel = false
-//  
-//  
+//
+//
 //     /**
 //   * persistence should be false
 //   */
 //	def newConfirmingPublisher(exchange:DeclaredExchange) =
 //	  new DurablePublisher(exchange) with ConfirmingPublisher
-//  
 //
-//  
+//
+//
 //trait ConfirmingPublisher extends ConfirmListener {
 //  this: CanBuildDurablePublisher#DurablePublisher =>
 //
-//  
-//  val lock : AnyRef = new Object(); 
+//
+//  val lock : AnyRef = new Object();
 //  private val confirmHandles = new ConcurrentHashMap[Long, Promise[Confirm]]().asScala
 //  private val unconfirmedSet = Collections.synchronizedSortedSet(new TreeSet[Long]()) //Synchronized set must be in sychronized block!
-//  
+//
 //  /**
 //   * Seems like there should be a better way to construct this so that I dont need the preConfirmed HashMap
 //   */
 //  private val preConfirmed = new ConcurrentHashMap[Long, Confirm]().asScala
-//  
+//
 //  durableChannel.whenAvailable { channel =>
 //    channel.confirmSelect()
 //    channel.addConfirmListener(this)
@@ -253,26 +262,26 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
 //        case None =>
 //          unconfirmedSet.add(seqNo)
 //        confirmHandles.put(seqNo, confirmPromise)
-//      } 
+//      }
 //      }
 //    }
 //    confirmPromise.future
 //  }
 //
-//  
-//  
+//
+//
 //  /**
-//   * implements the RabbitMQ ConfirmListener interface. 
+//   * implements the RabbitMQ ConfirmListener interface.
 //   */
 //  private[amqp] def handleAck(seqNo: Long, multiple: Boolean) = handleConfirm(seqNo, multiple, true)
 //
 //   /**
-//   * implements the RabbitMQ ConfirmListener interface. 
+//   * implements the RabbitMQ ConfirmListener interface.
 //   */
 //  private[amqp] def handleNack(seqNo: Long, multiple: Boolean) = handleConfirm(seqNo, multiple, false)
 //
-//  private def handleConfirm(seqNo: Long, multiple: Boolean, ack: Boolean) = lock.synchronized { 
-// 
+//  private def handleConfirm(seqNo: Long, multiple: Boolean, ack: Boolean) = lock.synchronized {
+//
 //    if (multiple) {
 //      val headSet = unconfirmedSet.headSet(seqNo + 1)
 //      headSet.asScala.foreach(complete)
@@ -288,9 +297,9 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
 //        case None => //the confirm happened before we got the SeqNo back, sadly this happens faairly often.
 //          preConfirmed.put(seqNo, if (ack) Ack else Nack)
 //      }
-//      
+//
 //    }
 //  }
-//  
+//
 //}
 //}

@@ -14,22 +14,22 @@
 //trait MqPublisher {
 //  implicit def system : ActorSystem
 //  def refFactory : ActorRefFactory = system //override to build the actor from a context
-//  
+//
 //  implicit val channel = AmqpExtension(system).newChannelForPublisher()
-//   
+//
 //  val exchange: ExchangeDeclaration
 //   val actorSetup : () => Actor
-//   
+//
 //   val ref = new FutureActor(
 //
 //	    channel.withChannel{ implicit c =>
-//	      
+//	
 //	   val ref = refFactory.actorOf(Props(actorSetup))
 //	   val publisher = channel.newPublisher(exchange(c))
-//	   (ref,None) 
+//	   (ref,None)
 //  }
-//	  
-//	   ) 
+//	
+//	   )
 //}
 //
 //trait ReturnToActor { self: MqPublisher =>

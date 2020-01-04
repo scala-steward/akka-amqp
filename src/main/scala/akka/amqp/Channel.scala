@@ -11,8 +11,8 @@ import akka.pattern.ask
 import akka.serialization.SerializationExtension
 import akka.amqp.Message._
 import scala.concurrent.duration._
-import scala.concurrent.{ Await, Future }
-import scala.concurrent.{ ExecutionContext, Promise }
+import scala.concurrent.{Await, Future}
+import scala.concurrent.{ExecutionContext, Promise}
 import reflect.ClassTag
 import akka.serialization.SerializationExtension
 import akka.actor.Props
@@ -29,19 +29,23 @@ object ChannelActor {
    */
   sealed trait ChannelState
   case object Unavailable extends ChannelState
-  case object Available extends ChannelState
+  case object Available   extends ChannelState
 
-  case class ChannelData private[amqp] (channel: Option[RabbitChannel], callbacks: Vector[RabbitChannel => Unit], mode: ChannelMode) {
-    def toUnavailable = ChannelData(None, callbacks, mode)
-    def toAvailable(channel: RabbitChannel) = ChannelData(Some(channel), callbacks, mode)
+  case class ChannelData private[amqp] (
+      channel: Option[RabbitChannel],
+      callbacks: Vector[RabbitChannel => Unit],
+      mode: ChannelMode
+  ) {
+    def toUnavailable                                = ChannelData(None, callbacks, mode)
+    def toAvailable(channel: RabbitChannel)          = ChannelData(Some(channel), callbacks, mode)
     def addCallback(callback: RabbitChannel => Unit) = ChannelData(channel, callbacks :+ callback, mode)
-    def toMode(mode: ChannelMode) = ChannelData(channel, callbacks, mode)
+    def toMode(mode: ChannelMode)                    = ChannelData(channel, callbacks, mode)
 
-    def isBasicChannel = mode == BasicChannel
+    def isBasicChannel        = mode == BasicChannel
     def isConfirmingPublisher = mode.isInstanceOf[ConfirmingPublisher]
-    def isPublisher = mode.isInstanceOf[Publisher]
-    def isConsumer = mode.isInstanceOf[ConsumerMode]
-    //def toBasicChannel -- Should not be implemented.  The 
+    def isPublisher           = mode.isInstanceOf[Publisher]
+    def isConsumer            = mode.isInstanceOf[ConsumerMode]
+    //def toBasicChannel -- Should not be implemented.  The
   }
 
   object %: {
@@ -62,6 +66,7 @@ object ChannelActor {
   sealed trait ChannelMode {
     def %:(callbacks: Vector[RabbitChannel => Unit]): ChannelData0 = ChannelData0(callbacks, this)
   }
+
   /**
    * A basicChannel may declare/delete Queues and Exchanges.
    * It may also publish but will not send back Returned or Confirm messages
@@ -83,10 +88,13 @@ object ChannelActor {
    */
   case class Consumer(listener: ActorRef, autoAck: Boolean, binding: Seq[QueueBinding])
 
-  case class ConsumerMode(listener: ActorRef, autoAck: Boolean, binding: Seq[QueueBinding], tags: Seq[String]) extends ChannelMode {
+  case class ConsumerMode(listener: ActorRef, autoAck: Boolean, binding: Seq[QueueBinding], tags: Seq[String])
+      extends ChannelMode {
     def cancelTags(channel: RabbitChannel) = {
       Exception.ignoring(classOf[ShutdownSignalException], classOf[IOException]) {
-        tags foreach { tag => channel.basicCancel(tag) }
+        tags.foreach { tag =>
+          channel.basicCancel(tag)
+        }
       }
       ConsumerMode(listener, autoAck, binding, Seq.empty)
     }
@@ -97,7 +105,6 @@ object ChannelActor {
    *         Channel Actor Message API
    * ****************************************
    */
-
   /**
    * create a new child Actor
    */
@@ -112,6 +119,7 @@ object ChannelActor {
    * Will execute only if the channel is currently available. Otherwise the message will be dropped.
    */
   case class OnlyIfAvailable(callback: RabbitChannel => Unit)
+
   /**
    * Message to Execute the given code when the Channel is first Received from the ConnectionActor
    * Or immediately if the channel has already been received
@@ -123,21 +131,25 @@ object ChannelActor {
   case class DeleteQueue(queue: DeclaredQueue, ifUnused: Boolean, ifEmpty: Boolean)
   case class DeleteExchange(exchange: NamedExchange, ifUnused: Boolean)
 
-  private[amqp] def apply(stashMessages: Boolean, settings: AmqpSettings) = if (stashMessages)
-    Props(new ChannelActor(settings) with Stash).withDispatcher("akka.amqp.stashing-dispatcher")
-  else
-    Props(new ChannelActor(settings) {
-      def stash(): Unit = {}
-      def unstashAll(): Unit = {}
-    })
+  private[amqp] def apply(stashMessages: Boolean, settings: AmqpSettings) =
+    if (stashMessages)
+      Props(new ChannelActor(settings) with Stash).withDispatcher("akka.amqp.stashing-dispatcher")
+    else
+      Props(new ChannelActor(settings) {
+        def stash(): Unit      = {}
+        def unstashAll(): Unit = {}
+      })
 
 }
 
 case class NewlyDeclared(declared: AnyRef)
 
-private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
-  extends Actor with FSM[ChannelState, ChannelData] with ShutdownListener
-  with ChannelPublisher with ChannelConsumer {
+abstract private[amqp] class ChannelActor(protected val settings: AmqpSettings)
+    extends Actor
+    with FSM[ChannelState, ChannelData]
+    with ShutdownListener
+    with ChannelPublisher
+    with ChannelConsumer {
   //perhaps registered callbacks should be replaced with the akka.actor.Stash
   //val registeredCallbacks = new collection.Seq[RabbitChannel => Unit]
   val serialization = SerializationExtension(context.system)
@@ -193,7 +205,7 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
       log.debug("Received channel {}", channel)
       channel.addShutdownListener(this)
       callbacks.foreach(_.apply(channel))
-      goto(Available) using stateData.toAvailable(channel)
+      goto(Available).using(stateData.toAvailable(channel))
     case Event(WithChannel(callback), _) =>
       stash()
       stay()
@@ -213,23 +225,22 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
       channel.queueDelete(queue.name, ifUnused, ifEmpty)
       stay()
     case Event(Declare(items @ _*), Some(channel) %: _ %: _) =>
-      items foreach {
-        declarable: Declarable[_] =>
-          sender ! declarable.declare(channel, context.system)
+      items.foreach { declarable: Declarable[_] =>
+        sender ! declarable.declare(channel, context.system)
       }
       stay()
     case Event(ConnectionDisconnected, Some(channel) %: _ %: _) =>
       log.warning("Connection went down of channel {}", channel)
-      goto(Unavailable) using stateData.toUnavailable
+      goto(Unavailable).using(stateData.toUnavailable)
     case Event(OnlyIfAvailable(callback), Some(channel) %: _ %: _) =>
       callback.apply(channel)
       stay()
     case Event(WithChannel(callback), Some(channel) %: _ %: _) =>
-      stay() replying callback.apply(channel)
+      stay().replying(callback.apply(channel))
   }
 
   whenUnhandled {
-    consumerUnhandled orElse publisherUnhandled orElse {
+    consumerUnhandled.orElse(publisherUnhandled).orElse {
       case Event(NewChildOfChannel(props, Some(childName)), _) =>
         sender ! context.actorOf(props, name = childName)
         stay()
@@ -237,7 +248,7 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
         sender ! context.actorOf(props)
         stay()
       case Event(ExecuteOnNewChannel(callback), _) =>
-        stay() using stateData.addCallback(callback)
+        stay().using(stateData.addCallback(callback))
       case Event(cause: ShutdownSignalException, _ %: callbacks %: mode) =>
         if (cause.isHardError) { // connection error, await ConnectionDisconnected()
           stay()
@@ -249,7 +260,7 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
           } else {
             log.error(cause, "Channel {} broke down", channel)
             context.parent ! RequestNewChannel //tell the connectionActor that a new channel is needed
-            goto(Unavailable) using stateData.toUnavailable
+            goto(Unavailable).using(stateData.toUnavailable)
           }
         }
     }
@@ -273,10 +284,9 @@ private[amqp] abstract class ChannelActor(protected val settings: AmqpSettings)
   }
 
   onTermination {
-    consumerTermination orElse {
+    consumerTermination.orElse {
       case StopEvent(_, _, Some(channel) %: _ %: _) =>
         terminateWhenActive(channel)
     }
   }
 }
-

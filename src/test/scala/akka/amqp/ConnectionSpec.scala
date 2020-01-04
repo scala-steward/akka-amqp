@@ -1,24 +1,20 @@
 package akka.amqp
-import akka.actor.FSM.{ UnsubscribeTransitionCallBack, CurrentState, Transition, SubscribeTransitionCallBack }
-import akka.testkit.{ AkkaSpec, TestKit, TestFSMRef }
-import akka.actor.{ ActorSystem, PoisonPill }
+import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition, UnsubscribeTransitionCallBack}
+import akka.testkit.{AkkaSpec, TestFSMRef, TestKit}
+import akka.actor.{ActorSystem, PoisonPill}
 import com.github.fridujo.rabbitmq.mock.MockConnectionFactory
 import scala.concurrent.duration._
-import scala.concurrent.{ Await }
+import scala.concurrent.{Await}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.Promise
 import akka.pattern.ask
-import org.scalatest.{ BeforeAndAfterAll, Tag, BeforeAndAfter }
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.wordspec.AnyWordSpec
 
 class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
-  abstract class AkkaContext
-    extends AkkaSpec(AmqpConfig.Valid.config)
-    with AmqpTest
-    with AmqpMock {
-      val connectionActor = TestFSMRef(new ConnectionActor(
-          new MockConnectionFactory, AmqpConfig.Valid.settings))
-    }
+  abstract class AkkaContext extends AkkaSpec(AmqpConfig.Valid.config) with AmqpTest with AmqpMock {
+    val connectionActor = TestFSMRef(new ConnectionActor(new MockConnectionFactory, AmqpConfig.Valid.settings))
+  }
 
   def withAkkaContext(f: AkkaContext => Any) = {
     val context = new AkkaContext {}
@@ -83,7 +79,7 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
     }
     "propagate state transition to child Actors" in withAkkaContext { context =>
       import context._
-      import ChannelActor.{ Available, Unavailable }
+      import ChannelActor.{Available, Unavailable}
 
       val channel = Await.result((connectionActor ? CreateChannel(false)).mapTo[akka.actor.ActorRef], 1 second)
       channel ! SubscribeTransitionCallBack(testActor)
@@ -111,7 +107,7 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
         connectionActor ! SubscribeTransitionCallBack(testActor)
         expectMsg(CurrentState(connectionActor, Connected))
         val portFuture = withConnection(_.getPort)
-        val promise = Promise.successful(5672).future
+        val promise    = Promise.successful(5672).future
         Await.ready(portFuture, 5 seconds).value shouldBe Await.ready(promise, 5 seconds).value
       }
     }

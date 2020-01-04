@@ -2,7 +2,7 @@ package akka.amqp
 
 import akka.actor.FSM.Transition
 import akka.actor.ActorSystem
-import akka.testkit.{ AkkaSpec, TestLatch, TestKit, TestFSMRef }
+import akka.testkit.{AkkaSpec, TestFSMRef, TestKit, TestLatch}
 import scala.concurrent.duration._
 import scala.concurrent.Await
 import org.mockito.Matchers._
@@ -14,7 +14,7 @@ class ChannelSpec extends AkkaSpec(AmqpConfig.Valid.config) with AmqpMock {
   "Durable Channel Actor" should {
     //  implicit val system = ActorSystem("channelspec")
     val channelActor = TestFSMRef(new ChannelActor(AmqpConfig.Valid.settings) {
-      def stash(): Unit = {}
+      def stash(): Unit      = {}
       def unstashAll(): Unit = {}
     })
 

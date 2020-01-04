@@ -5,10 +5,10 @@
 package akka.testkit
 
 import java.io.PrintStream
-import java.lang.management.{ ManagementFactory, ThreadInfo }
+import java.lang.management.{ManagementFactory, ThreadInfo}
 import java.util.Date
-import java.util.concurrent.{ CountDownLatch, TimeoutException }
-import scala.concurrent.{ Await, Awaitable, CanAwait, Promise }
+import java.util.concurrent.{CountDownLatch, TimeoutException}
+import scala.concurrent.{Await, Awaitable, CanAwait, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
@@ -40,7 +40,7 @@ object Coroner {
 
   private class WatchHandleImpl(startAndStopDuration: FiniteDuration) extends WatchHandle {
     val cancelPromise = Promise[Boolean]
-    val startedLatch = new CountDownLatch(1)
+    val startedLatch  = new CountDownLatch(1)
     val finishedLatch = new CountDownLatch(1)
 
     def waitForStart(): Unit = {
@@ -84,12 +84,13 @@ object Coroner {
       reportTitle: String,
       out: PrintStream,
       startAndStopDuration: FiniteDuration = defaultStartAndStopDuration,
-      displayThreadCounts: Boolean = false): WatchHandle = {
+      displayThreadCounts: Boolean = false
+  ): WatchHandle = {
 
     val watchedHandle = new WatchHandleImpl(startAndStopDuration)
 
     def triggerReportIfOverdue(duration: Duration): Unit = {
-      val threadMx = ManagementFactory.getThreadMXBean()
+      val threadMx     = ManagementFactory.getThreadMXBean()
       val startThreads = threadMx.getThreadCount
       if (displayThreadCounts) {
         threadMx.resetPeakThreadCount()
@@ -112,7 +113,8 @@ object Coroner {
         if (displayThreadCounts) {
           val endThreads = threadMx.getThreadCount
           out.println(
-            s"Coroner Thread Count started at $startThreads, ended at $endThreads, peaked at ${threadMx.getPeakThreadCount} in $reportTitle")
+            s"Coroner Thread Count started at $startThreads, ended at $endThreads, peaked at ${threadMx.getPeakThreadCount} in $reportTitle"
+          )
         }
         out.flush()
         watchedHandle.finished()
@@ -129,9 +131,9 @@ object Coroner {
   def printReport(reportTitle: String, out: PrintStream): Unit = {
     import out.println
 
-    val osMx = ManagementFactory.getOperatingSystemMXBean()
-    val rtMx = ManagementFactory.getRuntimeMXBean()
-    val memMx = ManagementFactory.getMemoryMXBean()
+    val osMx     = ManagementFactory.getOperatingSystemMXBean()
+    val rtMx     = ManagementFactory.getRuntimeMXBean()
+    val memMx    = ManagementFactory.getMemoryMXBean()
     val threadMx = ManagementFactory.getThreadMXBean()
 
     println(s"""#Coroner's Report: $reportTitle
@@ -261,7 +263,8 @@ trait WatchedByCoroner {
       getClass.getName,
       System.err,
       startAndStopDuration.dilated,
-      displayThreadCounts)
+      displayThreadCounts
+    )
   }
 
   final def stopCoroner(): Unit = {

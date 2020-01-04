@@ -21,9 +21,9 @@
 //    }
 //  }))
 //  val consumerChannel = ext.connection.newChannelForConsumer(false)
-//  
-//  val mq = consumerChannel ? Queue("test") 
-//  
+//
+//  val mq = consumerChannel ? Queue("test")
+//
 //  consumerChannel.newConsumer(mq, deliveryHandler, autoAcknowledge, queueBindings).newConsumer(Queue("test"), deliveryHandler)
 //  consumer.awaitStart()
 //

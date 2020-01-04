@@ -19,8 +19,10 @@ trait AmqpTest {
   implicit val to = akka.util.Timeout(5 seconds)
   implicit def system: ActorSystem
   def connectionActor: ActorRef
-  def rabbitConnectionAwait = Await.result((connectionActor ? WithConnection(x => x)).mapTo[RabbitConnection], 5 seconds)
-  def withConnectionAwait[T: ClassTag](callback: RabbitConnection => T)(duration: Duration) = Await.result(withConnection(callback), duration)
+  def rabbitConnectionAwait =
+    Await.result((connectionActor ? WithConnection(x => x)).mapTo[RabbitConnection], 5 seconds)
+  def withConnectionAwait[T: ClassTag](callback: RabbitConnection => T)(duration: Duration) =
+    Await.result(withConnection(callback), duration)
 
   def withConnection[T: ClassTag](callback: RabbitConnection => T): Future[T] = {
 
@@ -30,7 +32,7 @@ trait AmqpTest {
 }
 
 trait AmqpMock extends MockitoSugar {
-  val channel = mock[RabbitChannel]
+  val channel    = mock[RabbitChannel]
   val connection = mock[RabbitConnection]
 
   def eqBool(x: Boolean): java.lang.Boolean = org.mockito.Matchers.eq(x: java.lang.Boolean)

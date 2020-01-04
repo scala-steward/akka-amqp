@@ -4,20 +4,20 @@
 
 package akka.testkit
 
-import org.scalactic.{ CanEqual, TypeCheckedTripleEquals }
+import org.scalactic.{CanEqual, TypeCheckedTripleEquals}
 
 import language.postfixOps
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfterAll
 import akka.actor.ActorSystem
-import akka.event.{ Logging, LoggingAdapter }
+import akka.event.{Logging, LoggingAdapter}
 
 import scala.concurrent.duration._
 import scala.concurrent.Future
-import com.typesafe.config.{ Config, ConfigFactory }
+import com.typesafe.config.{Config, ConfigFactory}
 import akka.dispatch.Dispatchers
 import akka.testkit.TestEvent._
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{ Millis, Span }
+import org.scalatest.time.{Millis, Span}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 

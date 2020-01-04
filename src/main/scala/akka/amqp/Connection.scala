@@ -1,11 +1,11 @@
 package akka.amqp
 import scala.concurrent.Future
-import akka.actor.FSM.{ CurrentState, Transition, SubscribeTransitionCallBack }
-import scala.concurrent.{ ExecutionContext, Promise }
+import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition}
+import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration._
 import java.lang.Thread
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{ ThreadFactory, Executors }
+import java.util.concurrent.{Executors, ThreadFactory}
 import akka.actor._
 import akka.util.Timeout
 import akka.pattern.ask
@@ -14,20 +14,20 @@ import util.control.Exception
 
 sealed trait ConnectionState
 case object Disconnected extends ConnectionState
-case object Connected extends ConnectionState
+case object Connected    extends ConnectionState
 
 sealed trait ConnectionMessage
-case object Connect extends ConnectionMessage
-case object Disconnect extends ConnectionMessage
+case object Connect                                           extends ConnectionMessage
+case object Disconnect                                        extends ConnectionMessage
 case class WithConnection[T](callback: RabbitConnection => T) extends ConnectionMessage
 
 private[amqp] class ReconnectTimeoutGenerator {
 
-  var currentTimeout = 1;
+  var currentTimeout  = 1;
   var previousTimeout = 1
   def nextTimeoutSec(maxTimeoutSec: Int): Int = {
     if (currentTimeout < maxTimeoutSec) {
-      val result = currentTimeout
+      val result      = currentTimeout
       val nextTimeout = currentTimeout + previousTimeout
       currentTimeout = nextTimeout
       previousTimeout = result
@@ -45,7 +45,9 @@ private[amqp] class ReconnectTimeoutGenerator {
 case class CreateChannel(stashMessages: Boolean = true)
 
 class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, settings: AmqpSettings)
-  extends Actor with FSM[ConnectionState, Option[RabbitConnection]] with ShutdownListener {
+    extends Actor
+    with FSM[ConnectionState, Option[RabbitConnection]]
+    with ShutdownListener {
 
   import settings._
   connectionFactory.setRequestedHeartbeat(amqpHeartbeat.toSeconds.toInt)
@@ -57,17 +59,20 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
 
   lazy val timeoutGenerator = new ReconnectTimeoutGenerator
 
-  val executorService = Executors.newFixedThreadPool(channelThreads, new ThreadFactory {
-    import connectionFactory._
-    val uri = "amqp://%s@%s:%s%s".format(getUsername, getHost, getPort, getVirtualHost)
-    val counter = new AtomicInteger()
-    def newThread(r: Runnable) = {
-      val t = new Thread(r)
-      t.setDaemon(true)
-      t.setName("%s:channel-%s".format(uri, counter.incrementAndGet()))
-      t
+  val executorService = Executors.newFixedThreadPool(
+    channelThreads,
+    new ThreadFactory {
+      import connectionFactory._
+      val uri     = "amqp://%s@%s:%s%s".format(getUsername, getHost, getPort, getVirtualHost)
+      val counter = new AtomicInteger()
+      def newThread(r: Runnable) = {
+        val t = new Thread(r)
+        t.setDaemon(true)
+        t.setName("%s:channel-%s".format(uri, counter.incrementAndGet()))
+        t
+      }
     }
-  })
+  )
 
   /**
    * Creates a new channel actor. By default this actor will be able to
@@ -88,13 +93,14 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
     case Event(Connect, _) =>
       log.info("Connecting to one of [{}]", addresses.mkString(", "))
       try {
-        val connection = connectionFactory.newConnection(executorService, addresses.map(RabbitAddress.parseAddress).toArray)
+        val connection =
+          connectionFactory.newConnection(executorService, addresses.map(RabbitAddress.parseAddress).toArray)
         connection.addShutdownListener(this)
         log.info("Successfully connected to {}", connection)
         cancelTimer("reconnect")
         timeoutGenerator.reset()
 
-        goto(Connected) using Some(connection)
+        goto(Connected).using(Some(connection))
       } catch {
         case e: Exception =>
           log.error(e, "Error while trying to connect")
@@ -124,7 +130,7 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
       stay()
 
     case Event(WithConnection(callback), Some(connection)) =>
-      stay() replying callback(connection)
+      stay().replying(callback(connection))
     case Event(Disconnect, Some(connection)) =>
       try {
         log.debug("Disconnecting from {}", connection)
@@ -138,7 +144,7 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
       if (cause.isHardError) {
         log.error(cause, "Connection broke down {}", connection)
 
-        //if we are going to issue another connect command.  
+        //if we are going to issue another connect command.
         //Then we should make absolutely sure this connection is shut down first. (sometimes it isn't, particularly during testing)
         connection.removeShutdownListener(this)
         Exception.ignoring(classOf[AlreadyClosedException]) {
@@ -155,13 +161,13 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
       nextStateData match {
         case Some(connection) =>
           //send new channels to the child ChannelActors so they can reconnect
-          context.children foreach { _ ! NewChannel(connection.createChannel) }
-        case None => //should never happen 
+          context.children.foreach { _ ! NewChannel(connection.createChannel) }
+        case None => //should never happen
           throw new Exception("The Connected state should never be without a connection!")
       }
     case Connected -> Disconnected =>
       //notify children of the disconnect
-      context.children foreach { _ ! ConnectionDisconnected }
+      context.children.foreach { _ ! ConnectionDisconnected }
 
   }
 
@@ -169,7 +175,7 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
 
   onTermination {
     case StopEvent(reason, state, connectionOption) =>
-      stateData foreach { c =>
+      stateData.foreach { c =>
         Exception.ignoring(classOf[AlreadyClosedException]) {
           c.close()
         }
@@ -205,39 +211,39 @@ private[amqp] object ConnectionDisconnected
 //  implicit val extension : AmqpExtensionImpl
 //  protected val connection : DurableConnection
 //  lazy val system : ActorSystem = extension._system
-//  
+//
 //  def newChannel(persistent: Boolean = false) = new connection.DurableChannel {
 //    override val persistentChannel = persistent
 //  }
-//  
+//
 //  def newChannelForPublisher(persistent: Boolean = false) = new connection.DurableChannel with CanBuildDurablePublisher {
 //   override val persistentChannel = persistent
 //  }
-//  
+//
 //  /**
 //   * persistence is always false on the ConfirmingPublisher
 //   */
 //  def newChannelForConfirmingPublisher = new connection.DurableChannel with CanBuildConfirmingPublisher
-//  
+//
 //  def newChannelForConsumer(persistent: Boolean = false) = new connection.DurableChannel with CanBuildDurableConsumer {
 //   override val persistentChannel = persistent
 //  }
 //
-//  
+//
 //}
 //
 //class DurableConnection private[amqp] (implicit val extension: AmqpExtensionImpl) extends HasDurableChannel {
-//  
+//
 //override protected val connection = this
 //import extension._
-//  
+//
 ////  def withConnection[T : reflect.ClassTag](callback: RabbitConnection => T): Future[T] = {
 ////    import ExecutionContext.Implicits.global
 ////    implicit val timeout = Timeout(settings.interactionTimeout)
 ////    (durableConnectionActor ? WithConnection(callback)).mapTo[T]
 ////  }
 //
-////  
+////
 ////
 ////  /**
 ////   * have the actor disconnect

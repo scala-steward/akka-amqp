@@ -96,10 +96,10 @@
 //    }
 //
 //    //     "consumer message from the amq.fanout exchange" in new ConsumerScope    {
-//    //       
+//    //
 //    //     }
 //    //    "kill channel when consuming on non existant queue" in new ConsumerScope {
-//    //   
+//    //
 //    //      def exchange = Exchange("does-not-exist")("direct")
 //    //
 //    //      try {

@@ -21,12 +21,12 @@ object AmqpConfig {
             publisher-confirm-timeout   = 5000
   }
   """
-    val config = ConfigFactory.parseString(configString)
+    val config       = ConfigFactory.parseString(configString)
 
     val settings = new AmqpSettings(config.getConfig("akka.amqp.default"))
   }
   object Invalid {
-    val config = ConfigFactory.parseString("""
+    val config   = ConfigFactory.parseString("""
       akka.amqp.default {
        addresses           = ["invalid-test-connection-no-op:1234"]
   }
