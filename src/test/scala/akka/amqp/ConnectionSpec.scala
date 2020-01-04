@@ -1,7 +1,8 @@
 package akka.amqp
+
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition, UnsubscribeTransitionCallBack}
-import akka.testkit.{AkkaSpec, TestFSMRef}
-import akka.actor.PoisonPill
+import akka.testkit.{AkkaSpec, TestFSMRef, TestActors}
+import akka.actor.{ActorRef, PoisonPill}
 import com.github.fridujo.rabbitmq.mock.MockConnectionFactory
 import scala.concurrent.duration._
 import scala.concurrent.{Await}
@@ -13,6 +14,9 @@ import org.scalatest.wordspec.AnyWordSpec
 class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
   abstract class AkkaContext extends AkkaSpec(AmqpConfig.Valid.config) with AmqpTest with AmqpMock {
     val connectionActor = TestFSMRef(new ConnectionActor(new MockConnectionFactory, AmqpConfig.Valid.settings))
+
+    def addConnectionChildren(refs: ActorRef*): Unit =
+      refs.foreach(ref => connectionActor.underlyingActor.context.actorOf(TestActors.forwardActorProps(ref)))
   }
 
   def withAkkaContext(f: AkkaContext => Any) = {
@@ -94,21 +98,43 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
       connectionActor ! Connect
       expectMsg(Transition(channel, Unavailable, Available))
     }
-    "send new channels to child Actors on reconnect" in pending
-    "send disconnect message to child Actors on disconnect" in pending
+    "send new channels to child Actors on reconnect" in withAkkaContext { context =>
+      import context._
+
+      addConnectionChildren(testActor, testActor, testActor)
+
+      connectionActor ! Connect
+
+      expectMsgType[NewChannel]
+      expectMsgType[NewChannel]
+      expectMsgType[NewChannel]
+      expectNoMessage
+    }
+    "send disconnect message to child Actors on disconnect" in withAkkaContext { context =>
+      import context._
+
+      addConnectionChildren(testActor, testActor, testActor)
+
+      connectionActor ! Connect
+
+      receiveN(3)
+
+      connectionActor ! Disconnect
+
+      expectMsgAllOf(ConnectionDisconnected, ConnectionDisconnected, ConnectionDisconnected)
+      expectNoMessage
+    }
     "send NewChannel message to child actor upon creation in Connected state" in pending
     "do not send NewChannel message to child actor upon creation in Disconnected state" in pending
 
-    "Durable Connection" should {
-      "execute callback on connection when connected" in withAkkaContext { context =>
-        import context._
-        connectionActor ! Connect
-        connectionActor ! SubscribeTransitionCallBack(testActor)
-        expectMsg(CurrentState(connectionActor, Connected))
-        val portFuture = withConnection(_.getPort)
-        val promise    = Promise.successful(5672).future
-        Await.ready(portFuture, 5.seconds).value shouldBe Await.ready(promise, 5.seconds).value
-      }
+    "execute callback on connection when connected" in withAkkaContext { context =>
+      import context._
+      connectionActor ! Connect
+      connectionActor ! SubscribeTransitionCallBack(testActor)
+      expectMsg(CurrentState(connectionActor, Connected))
+      val portFuture = withConnection(_.getPort)
+      val promise    = Promise.successful(5672).future
+      Await.ready(portFuture, 5.seconds).value shouldBe Await.ready(promise, 5.seconds).value
     }
   }
 }
