@@ -11,7 +11,7 @@ val rabbitmqVersion      = "5.8.0"
 val mockitoVersion       = "1.10.19"
 val scalatestVersion     = "3.1.0"
 val scalatestPlusVersion = "1.0.0-M2"
-val rabbitmqMockVersion  = "1.0.13"
+val rabbitmqMockVersion  = "1.0.14"
 
 libraryDependencies ++= Seq(
   "com.rabbitmq"      % "amqp-client" % rabbitmqVersion,
