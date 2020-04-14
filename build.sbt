@@ -7,7 +7,7 @@ version := "2.6-SNAPSHOT"
 scalaVersion := "2.13.1"
 
 val akkaVersion          = "2.6.1"
-val rabbitmqVersion      = "5.8.0"
+val rabbitmqVersion      = "5.9.0"
 val mockitoVersion       = "1.10.19"
 val scalatestVersion     = "3.1.0"
 val scalatestPlusVersion = "1.0.0-M2"
