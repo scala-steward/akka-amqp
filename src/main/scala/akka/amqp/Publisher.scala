@@ -78,7 +78,7 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
     case Event(PublishToExchange(message, exchangeName, true), Some(channel) %: _ %: ConfirmingPublisher(_)) =>
       //      val confirmPromise = Promise[Confirm]
       //      sender ! confirmPromise
-      val returnToSender = sender
+      val returnToSender = sender()
 
       import message._
       log.debug("Publishing confirmed on '{}': {}", exchangeName, message)

@@ -82,7 +82,7 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
   when(Disconnected) {
     case Event(CreateChannel(stashMessages), _) =>
       val channelActor = newChannelActor(stashMessages)
-      sender ! channelActor //return channelActor to sender, but in a disconnected state
+      sender() ! channelActor //return channelActor to sender, but in a disconnected state
       stay()
     case Event(Connect, _) =>
       log.info("Connecting to one of [{}]", addresses.mkString(", "))
@@ -114,13 +114,13 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
   when(Connected) {
     case Event(RequestNewChannel, Some(connection)) =>
       //a channel must have broken, send the ChannelActor back a new one.
-      sender ! NewChannel(connection.createChannel)
+      sender() ! NewChannel(connection.createChannel)
       stay()
     case Event(CreateChannel(persistent), Some(connection)) =>
       val channelActor = newChannelActor(persistent)
       //give the channelActor it's first channel
       channelActor ! NewChannel(connection.createChannel)
-      sender ! channelActor //return channelActor to sender
+      sender() ! channelActor //return channelActor to sender
       stay()
 
     case Event(WithConnection(callback), Some(connection)) =>
@@ -165,7 +165,7 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
 
   }
 
-  initialize
+  initialize()
 
   onTermination {
     case StopEvent(_, _, _) =>

@@ -1,5 +1,4 @@
 package akka.amqp
-import akka.pattern.ask
 import akka.actor._
 import com.typesafe.config.Config
 import akka.actor.ExtensionIdProvider

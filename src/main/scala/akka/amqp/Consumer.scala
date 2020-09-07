@@ -1,8 +1,6 @@
 package akka.amqp
 
 import akka.actor.ActorRef
-
-import akka.actor.ActorRef
 import ChannelActor._
 //trait CanStop {
 //  def stop : Unit
@@ -90,7 +88,7 @@ trait ChannelConsumer { channelActor: ChannelActor =>
             //if the Default Queue is declared, return to sender.
             val declared = q.declare(channel, context.system)
             defaultQueue = Some(declared)
-            sender ! declared
+            sender() ! declared
             declared
           } else {
             defaultQueue.get

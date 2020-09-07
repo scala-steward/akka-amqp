@@ -21,9 +21,9 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
 
   def withAkkaContext(f: AkkaContext => Any) = {
     val context = new AkkaContext {}
-    context.beforeAll
+    context.beforeAll()
     f(context)
-    context.afterAll
+    context.afterAll()
   }
 
   "Durable Connection Actor" should {
@@ -76,7 +76,7 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
       connectionActor ! Connect
       val conn: RabbitConnection = rabbitConnectionAwait
       conn.isOpen() shouldBe true
-      system.terminate
+      system.terminate()
 
       awaitCond(conn.isOpen() == false, 5.seconds, 100.milli)
     }
@@ -108,7 +108,7 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
       expectMsgType[NewChannel]
       expectMsgType[NewChannel]
       expectMsgType[NewChannel]
-      expectNoMessage
+      expectNoMessage()
     }
     "send disconnect message to child Actors on disconnect" in withAkkaContext { context =>
       import context._
@@ -122,7 +122,7 @@ class ValidConnectionSpec extends AnyWordSpec with BeforeAndAfterAll {
       connectionActor ! Disconnect
 
       expectMsgAllOf(ConnectionDisconnected, ConnectionDisconnected, ConnectionDisconnected)
-      expectNoMessage
+      expectNoMessage()
     }
     "send NewChannel message to child actor upon creation in Connected state" in pending
     "do not send NewChannel message to child actor upon creation in Disconnected state" in pending

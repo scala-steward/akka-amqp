@@ -4,7 +4,6 @@ import java.io.IOException
 import util.control.Exception
 import akka.actor._
 import akka.serialization.SerializationExtension
-import akka.serialization.SerializationExtension
 import akka.actor.Props
 import akka.actor.Stash
 import ChannelActor._
@@ -215,7 +214,7 @@ abstract private[amqp] class ChannelActor(protected val settings: AmqpSettings)
       stay()
     case Event(Declare(items @ _*), Some(channel) %: _ %: _) =>
       items.foreach { declarable: Declarable[_] =>
-        sender ! declarable.declare(channel, context.system)
+        sender() ! declarable.declare(channel, context.system)
       }
       stay()
     case Event(ConnectionDisconnected, Some(channel) %: _ %: _) =>
@@ -231,10 +230,10 @@ abstract private[amqp] class ChannelActor(protected val settings: AmqpSettings)
   whenUnhandled {
     consumerUnhandled.orElse(publisherUnhandled).orElse {
       case Event(NewChildOfChannel(props, Some(childName)), _) =>
-        sender ! context.actorOf(props, name = childName)
+        sender() ! context.actorOf(props, name = childName)
         stay()
       case Event(NewChildOfChannel(props, None), _) =>
-        sender ! context.actorOf(props)
+        sender() ! context.actorOf(props)
         stay()
       case Event(ExecuteOnNewChannel(callback), _) =>
         stay().using(stateData.addCallback(callback))
