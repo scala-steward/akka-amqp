@@ -65,7 +65,6 @@ trait ChannelConsumer { channelActor: ChannelActor =>
    * declare QueueBindings if given, declare Queue and Exchange if they were given to the QueueBinding as undeclared
    * setup the Consumer and store the tag.
    * track the Queue and Exchange if they were declared, as well as the tag and QueueBinding.
-   *
    */
   def setupConsumer(
       channel: RabbitChannel,

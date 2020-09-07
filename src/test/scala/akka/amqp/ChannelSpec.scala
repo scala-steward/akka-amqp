@@ -8,7 +8,7 @@ class ChannelSpec extends AkkaSpec(AmqpConfig.Valid.config) with AmqpMock {
 
   "Durable Channel Actor" should {
     val channelActor = TestFSMRef(new ChannelActor(AmqpConfig.Valid.settings) {
-      def stash(): Unit      = {}
+      def stash(): Unit = {}
       def unstashAll(): Unit = {}
     })
 

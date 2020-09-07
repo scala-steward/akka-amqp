@@ -1,7 +1,7 @@
 package akka.amqp
 
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition, UnsubscribeTransitionCallBack}
-import akka.testkit.{AkkaSpec, TestFSMRef, TestActors}
+import akka.testkit.{AkkaSpec, TestActors, TestFSMRef}
 import akka.actor.{ActorRef, PoisonPill}
 import com.github.fridujo.rabbitmq.mock.MockConnectionFactory
 import scala.concurrent.duration._

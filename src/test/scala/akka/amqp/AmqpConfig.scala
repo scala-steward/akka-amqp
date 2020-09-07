@@ -26,11 +26,13 @@ object AmqpConfig {
     val settings = new AmqpSettings(config.getConfig("akka.amqp.default"))
   }
   object Invalid {
-    val config   = ConfigFactory.parseString("""
+    val config = ConfigFactory
+      .parseString("""
       akka.amqp.default {
        addresses           = ["invalid-test-connection-no-op:1234"]
   }
-        """).withFallback(Valid.config)
+        """)
+      .withFallback(Valid.config)
     val settings = new AmqpSettings(config.getConfig("akka.amqp.default"))
   }
 }

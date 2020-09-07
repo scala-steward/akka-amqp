@@ -126,7 +126,7 @@ object ChannelActor {
       Props(new ChannelActor(settings) with Stash).withDispatcher("akka.amqp.stashing-dispatcher")
     else
       Props(new ChannelActor(settings) {
-        def stash(): Unit      = {}
+        def stash(): Unit = {}
         def unstashAll(): Unit = {}
       })
 }

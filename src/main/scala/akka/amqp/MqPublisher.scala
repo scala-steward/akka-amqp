@@ -23,12 +23,12 @@
 //   val ref = new FutureActor(
 //
 //	    channel.withChannel{ implicit c =>
-//	
+//
 //	   val ref = refFactory.actorOf(Props(actorSetup))
 //	   val publisher = channel.newPublisher(exchange(c))
 //	   (ref,None)
 //  }
-//	
+//
 //	   )
 //}
 //

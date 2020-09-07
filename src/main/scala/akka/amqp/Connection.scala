@@ -71,11 +71,11 @@ class ConnectionActor private[amqp] (connectionFactory: ConnectionFactory, setti
   /**
    * Creates a new channel actor. By default this actor will be able to
    *  stash messages if it gets disconnected. It will unstash them after reconnecting.
-   *
    */
-  def newChannelActor(stashMessages: Boolean = true) = context.actorOf {
-    ChannelActor(stashMessages, settings)
-  }
+  def newChannelActor(stashMessages: Boolean = true) =
+    context.actorOf {
+      ChannelActor(stashMessages, settings)
+    }
 
   startWith(Disconnected, None)
 

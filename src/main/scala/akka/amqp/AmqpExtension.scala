@@ -35,10 +35,12 @@ class AmqpSettings(config: Config) {
   val maxReconnectDelay: Duration   = DurationLong(config.getDuration("max-reconnect-delay", MILLISECONDS)).milli
   val channelThreads: Int           = config.getInt("channel-threads")
   val interactionTimeout: Duration  = DurationLong(config.getDuration("interaction-timeout", MILLISECONDS)).milli
-  val channelCreationTimeout
-      : Duration = DurationLong(config.getDuration("channel-creation-timeout", MILLISECONDS)).milli
-  val channelReconnectTimeout
-      : Duration = DurationLong(config.getDuration("channel-reconnect-timeout", MILLISECONDS)).milli
+  val channelCreationTimeout: Duration = DurationLong(
+    config.getDuration("channel-creation-timeout", MILLISECONDS)
+  ).milli
+  val channelReconnectTimeout: Duration = DurationLong(
+    config.getDuration("channel-reconnect-timeout", MILLISECONDS)
+  ).milli
   val publisherConfirmTimeout: FiniteDuration = DurationLong(
     config.getDuration("publisher-confirm-timeout", MILLISECONDS)
   ).milli

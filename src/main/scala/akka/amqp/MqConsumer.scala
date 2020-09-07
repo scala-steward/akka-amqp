@@ -53,7 +53,7 @@
 //	   val consumer = channel.DurableConsumer(c)(declaredQueue, ref, autoAck, queueBindings : _*)
 //	   (ref,Some(consumer))
 //  }
-//	
+//
 //	   )
 //
 //}

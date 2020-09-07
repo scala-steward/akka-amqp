@@ -51,18 +51,22 @@ class MyAnswer(invoke: InvocationOnMock => Unit) extends Answer[Unit] {
   val lock: AnyRef = new Object
   @volatile
   private var runCount: Int = 0
-  def count = lock.synchronized {
-    runCount
-  }
-  def atLeastOnce = lock.synchronized {
-    runCount > 0
-  }
-  def once = lock.synchronized {
-    runCount == 1
-  }
+  def count =
+    lock.synchronized {
+      runCount
+    }
+  def atLeastOnce =
+    lock.synchronized {
+      runCount > 0
+    }
+  def once =
+    lock.synchronized {
+      runCount == 1
+    }
 
-  override def answer(invocation: InvocationOnMock): Unit = lock.synchronized {
-    runCount = runCount + 1
-    invoke(invocation)
-  }
+  override def answer(invocation: InvocationOnMock): Unit =
+    lock.synchronized {
+      runCount = runCount + 1
+      invoke(invocation)
+    }
 }

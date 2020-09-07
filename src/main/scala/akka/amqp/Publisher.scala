@@ -132,7 +132,8 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
 
   lazy val lock: AnyRef           = new Object();
   private lazy val confirmHandles = new ConcurrentHashMap[Long, ActorRef]().asScala
-  private lazy val unconfirmedSet = Collections.synchronizedSortedSet(new TreeSet[Long]()) //Synchronized set must be in sychronized block!
+  private lazy val unconfirmedSet =
+    Collections.synchronizedSortedSet(new TreeSet[Long]()) //Synchronized set must be in sychronized block!
 
   //  /**
   //   * Seems like there should be a better way to construct this so that I dont need the preConfirmed HashMap
@@ -149,23 +150,24 @@ trait ChannelPublisher extends ConfirmListener { actor: ChannelActor =>
    */
   private[amqp] def handleNack(seqNo: Long, multiple: Boolean) = handleConfirm(seqNo, multiple, false)
 
-  private def handleConfirm(seqNo: Long, multiple: Boolean, ack: Boolean) = lock.synchronized {
+  private def handleConfirm(seqNo: Long, multiple: Boolean, ack: Boolean) =
+    lock.synchronized {
 
-    if (multiple) {
-      val headSet = unconfirmedSet.headSet(seqNo + 1)
-      headSet.asScala.foreach(complete)
-      headSet.clear();
-    } else {
-      unconfirmedSet.remove(seqNo);
-      complete(seqNo)
-    }
+      if (multiple) {
+        val headSet = unconfirmedSet.headSet(seqNo + 1)
+        headSet.asScala.foreach(complete)
+        headSet.clear();
+      } else {
+        unconfirmedSet.remove(seqNo);
+        complete(seqNo)
+      }
 
-    def complete(seqNo: Long): Unit = {
-      confirmHandles.remove(seqNo).foreach {
-        _ ! (if (ack) Ack else Nack)
+      def complete(seqNo: Long): Unit = {
+        confirmHandles.remove(seqNo).foreach {
+          _ ! (if (ack) Ack else Nack)
+        }
       }
     }
-  }
 
 }
 
