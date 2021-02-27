@@ -4,7 +4,7 @@ name := "akka-amqp"
 
 version := "2.6-SNAPSHOT"
 
-scalaVersion := "2.13.3"
+scalaVersion := "2.13.5"
 
 val akkaVersion          = "2.6.9"
 val rabbitmqVersion      = "5.9.0"
